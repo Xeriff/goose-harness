@@ -22,6 +22,42 @@ export interface SharedMcpServerDraft {
   readonly url: string;
   /** One `Name: value` header per line. */
   readonly headers: string;
+  /** Set for a local program instead of `url`: its command line, quoted like a shell. */
+  readonly command?: string;
+  /** A local program's environment, one `NAME=value` per line. */
+  readonly env?: string;
+}
+
+/** Splits a command line into words, honouring single and double quotes. Null when a quote is left open. */
+export function splitCommandLine(line: string): ReadonlyArray<string> | null {
+  const words: Array<string> = [];
+  let word: string | null = null;
+  let quote: '"' | "'" | null = null;
+  for (const char of line) {
+    if (quote !== null) {
+      if (char === quote) quote = null;
+      else word = (word ?? "") + char;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+      word ??= "";
+    } else if (/\s/.test(char)) {
+      if (word !== null) words.push(word);
+      word = null;
+    } else {
+      word = (word ?? "") + char;
+    }
+  }
+  if (quote !== null) return null;
+  if (word !== null) words.push(word);
+  return words;
+}
+
+function formatCommandLine(words: ReadonlyArray<string>): string {
+  return words
+    .map((word) =>
+      word === "" || /[\s"']/.test(word) ? (word.includes('"') ? `'${word}'` : `"${word}"`) : word,
+    )
+    .join(" ");
 }
 
 /**
@@ -38,8 +74,16 @@ function formatSharedMcpServerHeaders(headers: Readonly<Record<string, string>>)
 export function sharedMcpServerDraft(server: SharedMcpServer): SharedMcpServerDraft {
   return {
     name: server.name,
-    url: server.url,
+    url: server.url ?? "",
     headers: formatSharedMcpServerHeaders(server.headers),
+    ...(server.command === undefined
+      ? {}
+      : {
+          command: formatCommandLine([server.command, ...server.args]),
+          env: Object.entries(server.env)
+            .map(([name, value]) => `${name}=${value}`)
+            .join("\n"),
+        }),
   };
 }
 
@@ -60,6 +104,31 @@ export function parseSharedMcpServerDraft(
   if (saved.some((server) => server.name === name && server.name !== editing?.name)) {
     return { error: `A server named ${name} already exists.` };
   }
+  // Secrets are stored under the id, so an edit keeps the saved server's
+  // (or its name, for an entry saved without one) through a rename.
+  const id =
+    editing === undefined ? newSharedMcpServerId(saved, name) : sharedMcpServerKey(editing);
+  const enabled = editing?.enabled ?? true;
+  if (draft.command !== undefined) {
+    const words = splitCommandLine(draft.command);
+    if (words === null) return { error: "Close the quote in the command." };
+    const [command, ...args] = words;
+    if (command === undefined) return { error: "Enter the command that starts the server." };
+    const env: Record<string, string> = {};
+    for (const line of (draft.env ?? "").split("\n")) {
+      if (line.trim().length === 0) continue;
+      const separator = line.indexOf("=");
+      const envName = separator > 0 ? line.slice(0, separator).trim() : "";
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(envName)) {
+        return { error: `Write each variable as "NAME=value" (got "${line.trim()}").` };
+      }
+      if (envName in env) return { error: `${envName} is listed twice.` };
+      env[envName] = line.slice(separator + 1);
+    }
+    const decoded = decodeSharedMcpServer({ id, name, command, args, env, enabled, headers: {} });
+    if (Exit.isFailure(decoded)) return { error: "Enter the command that starts the server." };
+    return { server: decoded.value };
+  }
   const headers: Record<string, string> = {};
   for (const line of draft.headers.split("\n")) {
     if (line.trim().length === 0) continue;
@@ -74,12 +143,10 @@ export function parseSharedMcpServerDraft(
     headers[headerName] = line.slice(separator + 1).trim();
   }
   const decoded = decodeSharedMcpServer({
-    // Header secrets are stored under the id, so an edit keeps the saved
-    // server's (or its name, for an entry saved without one) through a rename.
-    id: editing === undefined ? newSharedMcpServerId(saved, name) : sharedMcpServerKey(editing),
+    id,
     name,
     url: draft.url.trim(),
-    enabled: editing?.enabled ?? true,
+    enabled,
     headers,
   });
   if (Exit.isFailure(decoded)) return { error: "Enter an http:// or https:// URL." };

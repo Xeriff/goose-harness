@@ -84,6 +84,17 @@ after the switch. An OAuth login signs in again.
 A public server needs only a name and URL. For example, `deepwiki` at
 `https://mcp.deepwiki.com/mcp`.
 
+## Local programs
+
+Many MCP servers are programs you run, such as `npx -y @modelcontextprotocol/server-filesystem ~/Documents`.
+In the new server form, choose **Run a local program instead** and enter the
+command. Put anything the program needs, such as an API token, under
+environment variables, one per line as `NAME=value`. Their values are stored as
+secrets, like header values.
+
+T3 Code starts the program on the environment's machine, not on the device
+you're using, and keeps one copy running for every agent session.
+
 ## Turning a server off
 
 Use the server's switch to keep it out of new sessions without removing it.
@@ -92,7 +103,5 @@ New sessions pick up any change. For a session that's already running, use
 
 ## Limits
 
-- Servers are reached over `http(s)`. A command-line (stdio) server can be
-  shared through a local MCP gateway, then added here by its URL.
 - An OpenCode server you run yourself doesn't get shared servers, the same as
   T3 Code's own tools.

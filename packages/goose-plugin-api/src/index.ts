@@ -126,7 +126,9 @@ export interface GooseToolDefinition {
 
 export interface GooseMcpServerInfo {
   readonly name: string;
-  readonly url: string;
+  /** A remote server's address; a local program has `command` instead. */
+  readonly url?: string;
+  readonly command?: string;
   readonly enabled: boolean;
 }
 

@@ -136,9 +136,32 @@ const shared = (url: string, headers: Record<string, string> = {}): SharedMcpSer
   id: "fake",
   name: "fake",
   url,
+  args: [],
+  env: {},
   enabled: true,
   headers,
 });
+
+/** A newline-delimited JSON-RPC MCP server on stdio whose one tool echoes `GREETING` from its env. */
+const LOCAL_SERVER_SOURCE = `
+const reply = (id, result) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\\n");
+let buffer = "";
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  let newline;
+  while ((newline = buffer.indexOf("\\n")) >= 0) {
+    const message = JSON.parse(buffer.slice(0, newline));
+    buffer = buffer.slice(newline + 1);
+    if (message.method === "initialize") {
+      reply(message.id, { protocolVersion: message.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "local", version: "1" } });
+    } else if (message.method === "tools/list") {
+      reply(message.id, { tools: [{ name: "greet", inputSchema: { type: "object" } }] });
+    } else if (message.method === "tools/call") {
+      reply(message.id, { content: [{ type: "text", text: process.env.GREETING + " " + message.params.arguments.who }] });
+    }
+  }
+});
+`;
 
 describe("SharedMcpProxy", () => {
   it.effect("signs in once with OAuth, then lists and calls tools with the stored token", () =>
@@ -202,6 +225,31 @@ describe("SharedMcpProxy", () => {
       // A refused token is fixed by editing the header, not by an OAuth sign-in.
       assert.isFalse(refused.needsSignIn);
       assert.include(refused.message, "refused the saved Authorization header");
+    }).pipe(Effect.provide(layer), Effect.scoped),
+  );
+
+  it.effect("starts a local program with its env and calls its tools over stdio", () =>
+    Effect.gen(function* () {
+      const proxy = yield* SharedMcpProxy.SharedMcpProxy;
+      const local: SharedMcpServer = {
+        id: "local",
+        name: "local",
+        command: process.execPath,
+        args: ["-e", LOCAL_SERVER_SOURCE],
+        env: { GREETING: "hello" },
+        enabled: true,
+        headers: {},
+      };
+
+      assert.deepEqual(yield* proxy.probe(local), { serverName: "local", toolCount: 1 });
+      assert.deepEqual(
+        yield* proxy.callTool(local, { name: "greet", arguments: { who: "nelson" } }),
+        {
+          content: [{ type: "text", text: "hello nelson" }],
+        },
+      );
+      const signIn = yield* proxy.startSignIn(local, "http://t3.local:3773").pipe(Effect.flip);
+      assert.isFalse(signIn.needsSignIn);
     }).pipe(Effect.provide(layer), Effect.scoped),
   );
 });

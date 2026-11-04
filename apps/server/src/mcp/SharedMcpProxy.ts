@@ -10,6 +10,10 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { SseError, SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import {
+  getDefaultEnvironment,
+  StdioClientTransport,
+} from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -107,8 +111,9 @@ export class SharedMcpProxy extends Context.Service<
  * this repo's `exactOptionalPropertyTypes` rejects; they are the SDK's own
  * types on both sides, so the cast is sound.
  */
-const asTransport = (transport: StreamableHTTPClientTransport | SSEClientTransport) =>
-  transport as unknown as Parameters<Client["connect"]>[0];
+const asTransport = (
+  transport: StreamableHTTPClientTransport | SSEClientTransport | StdioClientTransport,
+) => transport as unknown as Parameters<Client["connect"]>[0];
 
 type Upstream = { readonly fingerprint: string; readonly client: Promise<Client> };
 type PendingSignIn = {
@@ -215,10 +220,27 @@ const make = Effect.gen(function* () {
     });
   };
 
+  const connectLocal = async (server: SharedMcpServer & { readonly command: string }) => {
+    const client = new Client({ name: "T3 Code", version: "1.0.0" });
+    await client.connect(
+      asTransport(
+        new StdioClientTransport({
+          command: server.command,
+          args: [...server.args],
+          env: { ...getDefaultEnvironment(), ...server.env },
+          ...(server.cwd === undefined ? {} : { cwd: server.cwd }),
+          stderr: "ignore",
+        }),
+      ),
+    );
+    return client;
+  };
+
   const connect = async (server: SharedMcpServer): Promise<Client> => {
+    if (server.command !== undefined) return connectLocal({ ...server, command: server.command });
     const key = sharedMcpServerKey(server);
     const stored = await run(loadOAuth(key));
-    const url = new URL(server.url);
+    const url = new URL(server.url ?? "");
     // Without tokens there is nothing to refresh, and a 401 means "sign in";
     // the SDK would otherwise try a token request with no code.
     const options = () => ({
@@ -244,10 +266,16 @@ const make = Effect.gen(function* () {
 
   const upstreams = new Map<string, Upstream>();
   const fingerprintOf = (server: SharedMcpServer) =>
-    `${server.url}\n${Object.entries(server.headers)
-      .map(([name, value]) => `${name.toLowerCase()}:${value}`)
-      .toSorted()
-      .join("\n")}`;
+    JSON.stringify([
+      server.url ?? null,
+      server.command ?? null,
+      server.args,
+      server.cwd ?? null,
+      Object.entries(server.env).toSorted(),
+      Object.entries(server.headers)
+        .map(([name, value]) => `${name.toLowerCase()}:${value}`)
+        .toSorted(),
+    ]);
   const clientFor = (server: SharedMcpServer): Promise<Client> => {
     const key = sharedMcpServerKey(server);
     const fingerprint = fingerprintOf(server);
@@ -299,6 +327,14 @@ const make = Effect.gen(function* () {
     server: SharedMcpServer,
     redirectBaseUrl: string,
   ) {
+    const url = server.url;
+    if (url === undefined) {
+      return yield* new SharedMcpProxyError({
+        server: server.name,
+        needsSignIn: false,
+        message: `${server.name} is a local program; it takes its credentials from its environment variables.`,
+      });
+    }
     const key = sharedMcpServerKey(server);
     const redirectUrl = new URL(SHARED_MCP_OAUTH_CALLBACK_PATH, redirectBaseUrl).toString();
     const stored: StoredOAuth = yield* loadOAuth(key);
@@ -308,7 +344,7 @@ const make = Effect.gen(function* () {
       stored.redirectUrl === redirectUrl ? stored : { ...kept, redirectUrl };
     yield* saveOAuth(key, next);
     const provider = makeProvider(key, next, true);
-    const transport = new StreamableHTTPClientTransport(new URL(server.url), {
+    const transport = new StreamableHTTPClientTransport(new URL(url), {
       requestInit: { headers: { ...server.headers } },
       authProvider: provider,
     });

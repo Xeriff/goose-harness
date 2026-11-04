@@ -56,7 +56,12 @@ export const make = Effect.gen(function* () {
 
   const servers = Effect.fn("GooseSharedMcp.servers")(function* () {
     const settings = yield* settingsService.getSettings;
-    return settings.sharedMcpServers.map(({ name, url, enabled }) => ({ name, url, enabled }));
+    return settings.sharedMcpServers.map(({ name, url, command, enabled }) => ({
+      name,
+      enabled,
+      ...(url === undefined ? {} : { url }),
+      ...(command === undefined ? {} : { command }),
+    }));
   });
 
   const listTools = Effect.fn("GooseSharedMcp.listTools")(function* (name: string) {

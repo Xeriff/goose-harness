@@ -203,7 +203,7 @@ function SharedMcpServerRow({
   readonly onRemove: () => void;
   readonly onMoveUrl: (url: string) => void;
 }) {
-  const v2Url = atlassianV2Url(server.url);
+  const v2Url = server.url === undefined ? null : atlassianV2Url(server.url);
   const testServer = useAtomCommand(serverEnvironment.testSharedMcpServer, {
     reportFailure: false,
   });
@@ -225,6 +225,8 @@ function SharedMcpServerRow({
     | null
   >(null);
   const headerCount = Object.keys(server.headers).length;
+  const envCount = Object.keys(server.env).length;
+  const local = server.command !== undefined;
   const failed = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
     const failure = squashAtomCommandFailure(result);
     setTest({
@@ -288,6 +290,16 @@ function SharedMcpServerRow({
       title={
         <span className="flex items-center gap-1.5">
           {server.name}
+          {local ? (
+            <Badge size="sm" variant="outline">
+              Local
+            </Badge>
+          ) : null}
+          {envCount > 0 ? (
+            <Badge size="sm" variant="outline">
+              {envCount} {envCount === 1 ? "variable" : "variables"}
+            </Badge>
+          ) : null}
           {headerCount > 0 ? (
             <Badge size="sm" variant="outline">
               {headerCount} {headerCount === 1 ? "header" : "headers"}
@@ -297,7 +309,9 @@ function SharedMcpServerRow({
       }
       description={
         <>
-          <span className="break-all font-mono">{server.url}</span>
+          <span className="break-all font-mono">
+            {server.url ?? [server.command, ...server.args].join(" ")}
+          </span>
           {v2Url ? (
             <span className="block">
               Atlassian's older v1 endpoint. Switch to v2 from the menu; an OAuth server signs in
@@ -348,10 +362,12 @@ function SharedMcpServerRow({
                 <PlugZapIcon />
                 Test connection
               </MenuItem>
-              <MenuItem disabled={test?.state === "running"} onClick={() => void signIn()}>
-                <LogInIcon />
-                Sign in
-              </MenuItem>
+              {local ? null : (
+                <MenuItem disabled={test?.state === "running"} onClick={() => void signIn()}>
+                  <LogInIcon />
+                  Sign in
+                </MenuItem>
+              )}
               <MenuItem onClick={onEdit}>
                 <PencilIcon />
                 Edit
@@ -394,6 +410,14 @@ function SharedMcpServerForm({
   const [error, setError] = useState<string | null>(null);
   // Set while the Atlassian API-token quick-fill asks for the account's email and token.
   const [apiToken, setApiToken] = useState<{ email: string; token: string } | null>(null);
+  const local = draft.command !== undefined;
+  const setLocal = (next: boolean) => {
+    setDraft(({ command: _command, env: _env, ...current }) =>
+      next ? { ...current, command: "", env: "" } : current,
+    );
+    setApiToken(null);
+    setError(null);
+  };
   const fillAtlassian = (withApiToken: boolean) => {
     setDraft((current) => ({
       name: current.name || "atlassian",
@@ -423,7 +447,7 @@ function SharedMcpServerForm({
     onSave(parsed.server);
   };
   const field = (key: keyof SharedMcpServerDraft) => ({
-    value: draft[key],
+    value: draft[key] ?? "",
     onChange: (event: { currentTarget: { value: string } }) => {
       // Read now: React clears `currentTarget` before a deferred updater runs.
       const value = event.currentTarget.value;
@@ -436,7 +460,9 @@ function SharedMcpServerForm({
       title={editing ? `Edit ${editing.name}` : "New MCP server"}
       description={
         error ??
-        "Agents pick it up in their next session. Header values are stored as secrets; a server that uses OAuth signs in from its menu."
+        (local
+          ? "Agents pick it up in their next session. T3 Code runs the command on this environment's machine; variable values are stored as secrets."
+          : "Agents pick it up in their next session. Header values are stored as secrets; a server that uses OAuth signs in from its menu.")
       }
       control={
         <div className="flex items-center gap-2">
@@ -465,15 +491,33 @@ function SharedMcpServerForm({
             aria-label="Server name"
             {...field("name")}
           />
-          <Input
-            className="min-w-64 flex-1"
-            size="sm"
-            placeholder="http://127.0.0.1:3050/mcp"
-            aria-label="Server URL"
-            {...field("url")}
-          />
+          {local ? (
+            <Input
+              className="min-w-64 flex-1"
+              size="sm"
+              placeholder="npx -y @modelcontextprotocol/server-filesystem ~/Documents"
+              aria-label="Server command"
+              {...field("command")}
+            />
+          ) : (
+            <Input
+              className="min-w-64 flex-1"
+              size="sm"
+              placeholder="http://127.0.0.1:3050/mcp"
+              aria-label="Server URL"
+              {...field("url")}
+            />
+          )}
         </div>
-        {apiToken === null ? (
+        {local ? (
+          <Textarea
+            size="sm"
+            rows={2}
+            placeholder="Optional environment variables, one per line: API_TOKEN=…"
+            aria-label="Server environment variables"
+            {...field("env")}
+          />
+        ) : apiToken === null ? (
           <Textarea
             size="sm"
             rows={2}
@@ -511,12 +555,19 @@ function SharedMcpServerForm({
         )}
         {editing === undefined ? (
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            Atlassian (Jira, Confluence):
-            <Button size="xs" variant="outline" onClick={() => fillAtlassian(true)}>
-              API token
-            </Button>
-            <Button size="xs" variant="outline" onClick={() => fillAtlassian(false)}>
-              OAuth
+            {local ? null : (
+              <>
+                Atlassian (Jira, Confluence):
+                <Button size="xs" variant="outline" onClick={() => fillAtlassian(true)}>
+                  API token
+                </Button>
+                <Button size="xs" variant="outline" onClick={() => fillAtlassian(false)}>
+                  OAuth
+                </Button>
+              </>
+            )}
+            <Button size="xs" variant="ghost" onClick={() => setLocal(!local)}>
+              {local ? "Use a URL instead" : "Run a local program instead"}
             </Button>
           </div>
         ) : null}
