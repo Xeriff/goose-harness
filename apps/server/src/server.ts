@@ -92,6 +92,9 @@ import * as ProcessRunner from "./processRunner.ts";
 import * as GitManager from "./git/GitManager.ts";
 import * as EnvironmentTheme from "./environmentTheme.ts";
 import * as Keybindings from "./keybindings.ts";
+import * as SharedMcpHttp from "./mcp/SharedMcpHttp.ts";
+import * as SharedMcpProxy from "./mcp/SharedMcpProxy.ts";
+import * as SharedMcpServerProbe from "./mcp/SharedMcpServerProbe.ts";
 import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerOwnership from "./serverOwnership.ts";
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
@@ -673,6 +676,14 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.provideMerge(layerVcs),
   Layer.provideMerge(Layer.mergeAll(layerTerminal, layerPreview, layerDevice)),
   Layer.provideMerge(layerPersistence),
+  // One proxy instance: Settings start sign-ins over RPC and the HTTP
+  // callback finishes them, so both must see the same pending sign-ins.
+  Layer.provideMerge(
+    SharedMcpServerProbe.layer.pipe(
+      Layer.provideMerge(SharedMcpProxy.layer.pipe(Layer.provide(ServerSecretStore.layer))),
+      Layer.provide(layerServerSettings),
+    ),
+  ),
   Layer.provideMerge(
     Layer.mergeAll(Keybindings.layer, EnvironmentTheme.layer, UsageLimitSources.layer),
   ),
@@ -773,6 +784,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerHttp.layerAttachmentUploadRoute,
     GuestHttp.layer,
     DeviceHubProxy.layer,
+    SharedMcpHttp.layer,
     ServerBrowserStream.routeLayer,
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,

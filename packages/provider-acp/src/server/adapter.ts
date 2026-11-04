@@ -818,8 +818,20 @@ function acpMcpContext(
     return { servers: [], acpServers: [], httpServers: [] };
   }
   // codex-acp 1.2.0 and pi-acp drop injected HTTP servers, so HTTP is opt-in per flavor.
+  // Shared servers are T3 endpoints too, so they ride the same stdio bridge.
+  const sharedServers = (session.sharedServers ?? []).map((server) => ({
+    name: server.name,
+    command: self.command,
+    args: [...selfInvocationArgs(self, ["acp-mcp-bridge"])],
+    env: [
+      { name: "ELECTRON_RUN_AS_NODE", value: "1" },
+      { name: "T3_ACP_MCP_ENDPOINT", value: server.url },
+      { name: "T3_ACP_MCP_AUTHORIZATION", value: session.authorizationHeader },
+    ],
+  }));
   return {
     servers: [
+      ...sharedServers,
       {
         name: "t3-code",
         command: self.command,
@@ -831,10 +843,16 @@ function acpMcpContext(
         ],
       },
     ],
-    acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }],
+    acpServers: [...sharedServers, { type: "acp", name: "t3-code", serverId: "t3-code" }],
     httpServers:
       mcpOverHttp === true
         ? [
+            ...(session.sharedServers ?? []).map((server) => ({
+              type: "http" as const,
+              name: server.name,
+              url: server.url,
+              headers: [{ name: "Authorization", value: session.authorizationHeader }],
+            })),
             {
               type: "http",
               name: "t3-code",

@@ -57,6 +57,7 @@ import * as OpenCode2Client from "./OpenCode2Client.ts";
 import * as OpenCode2Server from "./OpenCode2Server.ts";
 import * as OpenCodeRuntime from "../OpenCodeRuntime.ts";
 import { readableProviderErrorMessage } from "../providerErrorMessage.ts";
+import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { buildRuntimeInstructions } from "@t3tools/provider-core/server/runtimeInstructions";
 import { t3OrchestrationSystemPrompt } from "@t3tools/provider-core/server/orchestrationInstructions";
@@ -315,7 +316,14 @@ interface ThreadState {
   readonly stoppedChildren: Set<string>;
   readonly strandedSteers: Set<string>;
   mcp:
-    | { readonly name: string; readonly directory: string; readonly credential: string }
+    | {
+        readonly name: string;
+        readonly directory: string;
+        readonly credential: string;
+        readonly shared: ReadonlyArray<McpProviderSession.SharedMcpSessionServer>;
+        /** Every server OpenCode accepted for this thread, T3's own and the shared ones. */
+        readonly names: ReadonlyArray<string>;
+      }
     | undefined;
   instructions: string | undefined;
 }
@@ -363,6 +371,45 @@ export const t3McpServerName = Effect.fn("t3McpServerName")(function* (threadId:
   return `t3-code-${Hex.encode(digest).slice(0, 16)}`;
 });
 
+/**
+ * Shared MCP servers register per thread as `t3-shared-<thread>_<server>`, a prefix outside T3's
+ * blanket allow. Long thread ids become a digest so names fit OpenCode's 64 characters.
+ */
+const sharedMcpServerPrefix = Effect.fn("sharedMcpServerPrefix")(function* (threadId: string) {
+  const prefix = `t3-shared-${threadId.replaceAll(/[^a-zA-Z0-9_-]/g, "_")}`;
+  if (prefix.length <= 39) return prefix;
+  const crypto = yield* Digest.Digest;
+  const digest = yield* crypto
+    .digest(Digest.sha256, new TextEncoder().encode(threadId))
+    .pipe(Effect.orDie);
+  return `t3-shared-${Hex.encode(digest).slice(0, 16)}`;
+});
+
+// Other threads' shared servers are denied; this thread's ask outside full access, like any third-party tool.
+const sharedMcpRules = (policy: RulesPolicy, sharedPrefix: string | null): ReadonlyArray<Rule> =>
+  sharedPrefix === null
+    ? []
+    : [
+        { action: "t3-shared-*", resource: "*", effect: "deny" },
+        {
+          action: `${sharedPrefix}_*`,
+          resource: "*",
+          effect: policy.runtimeMode === "full-access" ? "allow" : "ask",
+        },
+      ];
+
+const sameSharedServers = (
+  left: ReadonlyArray<McpProviderSession.SharedMcpSessionServer>,
+  right: ReadonlyArray<McpProviderSession.SharedMcpSessionServer>,
+) =>
+  left.length === right.length &&
+  left.every(
+    (server, index) =>
+      server.name === right[index]?.name &&
+      server.url === right[index]?.url &&
+      server.headers.Authorization === right[index]?.headers.Authorization,
+  );
+
 // Last match wins: deny all threads' T3 servers, then allow only this thread's.
 const mcpRules = (mcpServerName: string | null): ReadonlyArray<Rule> =>
   mcpServerName === null
@@ -377,6 +424,7 @@ const sessionRules = (
   paths: ReadonlyArray<Rule>,
   grants: ReadonlyArray<Rule>,
   mcpServerName: string | null,
+  sharedPrefix: string | null,
 ): ReadonlyArray<Rule> => [
   ...(policy.runtimeMode === "full-access"
     ? [rule("*", "allow")]
@@ -385,6 +433,8 @@ const sessionRules = (
         rule("edit", policy.runtimeMode === "auto-accept-edits" ? "allow" : "ask"),
         rule("external_directory", "ask"),
       ]),
+  // Before grants, so "Always allow this session" still holds for a shared tool.
+  ...sharedMcpRules(policy, sharedPrefix),
   ...grants,
   // Plan edits are re-allowed only for plan paths; free-tier sessions refuse denied shell/read.
   ...(policy.interactionMode === "plan" ? [rule("edit", "deny")] : []),
@@ -675,6 +725,8 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
   const driver = OPENCODE_PROVIDER;
   const mcpServerNameFor = (threadId: string) =>
     t3McpServerName(threadId).pipe(Effect.provideService(Digest.Digest, crypto));
+  const sharedPrefixFor = (threadId: string) =>
+    sharedMcpServerPrefix(threadId).pipe(Effect.provideService(Digest.Digest, crypto));
 
   const borrow = Effect.gen(function* () {
     const lent = yield* Deferred.make<
@@ -2834,6 +2886,7 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
         paths,
         policy.runtimeMode === "full-access" ? [] : thread.grants,
         appThreadId === null ? null : yield* mcpServerNameFor(appThreadId),
+        appThreadId === null ? null : yield* sharedPrefixFor(appThreadId),
       );
     });
 
@@ -3070,10 +3123,18 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       return files;
     });
 
-    const removeMcp = (mcp: { readonly name: string; readonly directory: string }) =>
-      Effect.suspend(() =>
-        client.mcp.remove({ server: mcp.name, location: { directory: mcp.directory } }),
-      ).pipe(Effect.timeout("5 seconds"), Effect.ignore({ log: true }));
+    const removeMcp = (mcp: {
+      readonly names: ReadonlyArray<string>;
+      readonly directory: string;
+    }) =>
+      Effect.forEach(
+        mcp.names,
+        (server) =>
+          Effect.suspend(() =>
+            client.mcp.remove({ server, location: { directory: mcp.directory } }),
+          ).pipe(Effect.timeout("5 seconds"), Effect.ignore({ log: true })),
+        { discard: true },
+      );
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
@@ -3095,41 +3156,63 @@ export const make = Effect.fn("OpenCode2Adapter.make")(function* (instanceId: Pr
       const wanted =
         mcpSession === undefined || connection.external
           ? undefined
-          : { name, directory, credential: mcpSession.authorizationHeader };
+          : {
+              name,
+              directory,
+              credential: mcpSession.authorizationHeader,
+              shared: mcpSession.sharedServers ?? [],
+            };
       if (
         state.mcp !== undefined &&
         (wanted === undefined ||
           state.mcp.directory !== wanted.directory ||
-          state.mcp.credential !== wanted.credential)
+          state.mcp.credential !== wanted.credential ||
+          !sameSharedServers(state.mcp.shared, wanted.shared))
       ) {
         yield* removeMcp(state.mcp);
         state.mcp = undefined;
       }
       // Idle Location eviction drops runtime MCP servers without clearing T3's cache.
       // Re-adding an unchanged config keeps its existing connection.
+      const addMcp = (server: string, config: Mcp.RemoteConfig, label: string) =>
+        client.mcp.add({ server, location: { directory }, config }).pipe(
+          Effect.timeout(INVENTORY_TIMEOUT),
+          Effect.as(true),
+          Effect.catchCause((cause) =>
+            Effect.logWarning(`Could not add ${label} to OpenCode.`, cause).pipe(Effect.as(false)),
+          ),
+        );
       let mcpAvailable = false;
       if (wanted !== undefined) {
-        mcpAvailable = yield* client.mcp
-          .add({
-            server: name,
-            location: { directory },
-            config: new Mcp.RemoteConfig({
+        const sharedPrefix = yield* sharedPrefixFor(turnInput.threadId);
+        const addShared = (server: McpProviderSession.SharedMcpSessionServer) =>
+          addMcp(
+            `${sharedPrefix}_${server.name}`,
+            new Mcp.RemoteConfig({
               type: "remote",
-              url: mcpSession!.endpoint,
-              headers: { Authorization: wanted.credential },
+              url: server.url,
+              ...(Object.keys(server.headers).length === 0 ? {} : { headers: server.headers }),
               oauth: false,
             }),
-          })
-          .pipe(
-            Effect.timeout(INVENTORY_TIMEOUT),
-            Effect.as(true),
-            Effect.catchCause((cause) =>
-              Effect.logWarning("Could not add T3 Code's MCP server to OpenCode.", cause).pipe(
-                Effect.as(false),
-              ),
-            ),
+            `shared MCP server ${server.name}`,
           );
-        if (mcpAvailable) state.mcp = wanted;
+        mcpAvailable = yield* addMcp(
+          name,
+          new Mcp.RemoteConfig({
+            type: "remote",
+            url: mcpSession!.endpoint,
+            headers: { Authorization: wanted.credential },
+            oauth: false,
+          }),
+          "T3 Code's MCP server",
+        );
+        // Shared servers are re-added each turn like T3's; one OpenCode refuses is retried next turn.
+        const names = new Set(state.mcp?.names ?? []);
+        if (mcpAvailable) names.add(name);
+        for (const server of wanted.shared) {
+          if (yield* addShared(server)) names.add(`${sharedPrefix}_${server.name}`);
+        }
+        if (names.size > 0) state.mcp = { ...wanted, names: [...names] };
       }
       const instructions = [
         buildRuntimeInstructions({ harness: "OpenCode", model: turnInput.modelSelection.model }),

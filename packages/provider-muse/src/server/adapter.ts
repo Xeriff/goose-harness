@@ -1836,6 +1836,17 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
           const config = mcpSession
             ? {
                 mcpServers: {
+                  ...Object.fromEntries(
+                    (mcpSession.sharedServers ?? []).map((server) => [
+                      server.name,
+                      {
+                        transport: "streamableHttp",
+                        mode: "optional",
+                        url: server.url,
+                        headers: server.headers,
+                      },
+                    ]),
+                  ),
                   // Muse's required default fails runs if T3 tools are unreachable; make them optional.
                   "t3-code": {
                     transport: "streamableHttp",

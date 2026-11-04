@@ -10,6 +10,7 @@ import {
   UsageLimitSourceConfig,
   isSecretReference,
   secretSettingsFields,
+  sharedMcpServerKey,
 } from "@t3tools/contracts";
 import { acpRegistryClient } from "@t3tools/provider-acp-registry/client";
 import { cursorClient } from "@t3tools/provider-cursor/client";
@@ -230,6 +231,22 @@ function mapSecretFieldGroups(
       ) as SimlockDeviceHostConfig,
   );
 
+  // Header values are usually bearer tokens. Each is mapped on its own so header names keep their case.
+  const sharedMcpServers = settings.sharedMcpServers.map((server) => ({
+    ...server,
+    headers: Object.fromEntries(
+      Object.entries(server.headers).map(([headerName, value]) => [
+        headerName,
+        mapFields(
+          { value },
+          ["value"],
+          () =>
+            `shared-mcp-header-${encode(sharedMcpServerKey(server))}-${encode(headerName.toLowerCase())}`,
+        ).value as string,
+      ]),
+    ),
+  }));
+
   return {
     ...settings,
     providerInstances,
@@ -237,5 +254,6 @@ function mapSecretFieldGroups(
     usageLimitSources,
     easDeviceHosts,
     simlockDeviceHosts,
+    sharedMcpServers,
   };
 }
