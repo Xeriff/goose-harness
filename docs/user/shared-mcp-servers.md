@@ -65,6 +65,20 @@ login. Put it under **Headers**, one per line, as `Name: value`:
 Header values are stored as secrets. When you edit the server, they show as
 `••••••`. Leave that as it is to keep the saved value, or type a new one.
 
+## Atlassian (Jira, Confluence)
+
+In the new server form, **Atlassian** fills in Atlassian's recommended endpoint,
+`https://mcp.atlassian.com/v2/mcp`:
+
+- **API token** asks for your Atlassian account email and an
+  [API token](https://id.atlassian.com/manage-profile/security/api-tokens), and
+  saves them as the server's login header.
+- **OAuth** leaves the login to **Sign in** from the server's menu.
+
+A server still on an older `https://mcp.atlassian.com/v1/…` address shows a
+note, and its menu has **Switch to Atlassian v2**. An API token keeps working
+after the switch. An OAuth login signs in again.
+
 ## Servers with no login
 
 A public server needs only a name and URL. For example, `deepwiki` at

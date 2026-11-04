@@ -95,3 +95,17 @@ export function upsertSharedMcpServer(
   if (editing === undefined) return [...saved, server];
   return saved.map((entry) => (entry.name === editing.name ? server : entry));
 }
+
+/** Atlassian's recommended endpoint; the older /v1 ones still answer but expose an older tool set. */
+export const ATLASSIAN_MCP_URL = "https://mcp.atlassian.com/v2/mcp";
+
+/** The `Authorization` header Atlassian's MCP takes for an account email and API token. */
+export function atlassianBasicAuthHeader(email: string, apiToken: string): string {
+  const bytes = new TextEncoder().encode(`${email.trim()}:${apiToken.trim()}`);
+  return `Authorization: Basic ${btoa(String.fromCharCode(...bytes))}`;
+}
+
+/** The v2 endpoint for a server still on Atlassian's v1 endpoints, or null. */
+export function atlassianV2Url(url: string): string | null {
+  return /^https:\/\/mcp\.atlassian\.com\/v1(\/|$)/.test(url.trim()) ? ATLASSIAN_MCP_URL : null;
+}

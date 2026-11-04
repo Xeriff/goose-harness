@@ -1,5 +1,8 @@
 import { type SharedMcpServer, SharedMcpServerTestError } from "@t3tools/contracts";
 import {
+  ATLASSIAN_MCP_URL,
+  atlassianBasicAuthHeader,
+  atlassianV2Url,
   parseSharedMcpServerDraft,
   sharedMcpServerDraft,
   type SharedMcpServerDraft,
@@ -10,6 +13,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  ArrowUpCircleIcon,
   LogInIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -164,6 +168,9 @@ function SharedMcpServerRows({
               onFormChange({ environmentId: environment.environmentId, editing: server })
             }
             onRemove={() => void save(servers.filter((entry) => entry !== server))}
+            onMoveUrl={(url) =>
+              void save(servers.map((entry) => (entry === server ? { ...entry, url } : entry)))
+            }
           />
         ),
       )}
@@ -186,6 +193,7 @@ function SharedMcpServerRow({
   onToggle,
   onEdit,
   onRemove,
+  onMoveUrl,
 }: {
   readonly environment: EnvironmentPresentation;
   readonly server: SharedMcpServer;
@@ -193,7 +201,9 @@ function SharedMcpServerRow({
   readonly onToggle: (enabled: boolean) => void;
   readonly onEdit: () => void;
   readonly onRemove: () => void;
+  readonly onMoveUrl: (url: string) => void;
 }) {
+  const v2Url = atlassianV2Url(server.url);
   const testServer = useAtomCommand(serverEnvironment.testSharedMcpServer, {
     reportFailure: false,
   });
@@ -285,7 +295,17 @@ function SharedMcpServerRow({
           ) : null}
         </span>
       }
-      description={<span className="break-all font-mono">{server.url}</span>}
+      description={
+        <>
+          <span className="break-all font-mono">{server.url}</span>
+          {v2Url ? (
+            <span className="block">
+              Atlassian's older v1 endpoint. Switch to v2 from the menu; an OAuth server signs in
+              again after the switch.
+            </span>
+          ) : null}
+        </>
+      }
       status={
         test === null ? undefined : test.state === "running" ? (
           test.message
@@ -336,6 +356,12 @@ function SharedMcpServerRow({
                 <PencilIcon />
                 Edit
               </MenuItem>
+              {v2Url ? (
+                <MenuItem onClick={() => onMoveUrl(v2Url)}>
+                  <ArrowUpCircleIcon />
+                  Switch to Atlassian v2
+                </MenuItem>
+              ) : null}
               <MenuSeparator />
               <MenuItem onClick={onRemove}>
                 <Trash2Icon />
@@ -366,9 +392,30 @@ function SharedMcpServerForm({
     editing ? sharedMcpServerDraft(editing) : { name: "", url: "", headers: "" },
   );
   const [error, setError] = useState<string | null>(null);
+  // Set while the Atlassian API-token quick-fill asks for the account's email and token.
+  const [apiToken, setApiToken] = useState<{ email: string; token: string } | null>(null);
+  const fillAtlassian = (withApiToken: boolean) => {
+    setDraft((current) => ({
+      name: current.name || "atlassian",
+      url: ATLASSIAN_MCP_URL,
+      headers: "",
+    }));
+    setApiToken(withApiToken ? { email: "", token: "" } : null);
+    setError(null);
+  };
   const submit = () => {
     if (saving) return;
-    const parsed = parseSharedMcpServerDraft(servers, draft, editing);
+    if (apiToken !== null && (!apiToken.email.trim() || !apiToken.token.trim())) {
+      setError("Enter the Atlassian account email and an API token.");
+      return;
+    }
+    const parsed = parseSharedMcpServerDraft(
+      servers,
+      apiToken === null
+        ? draft
+        : { ...draft, headers: atlassianBasicAuthHeader(apiToken.email, apiToken.token) },
+      editing,
+    );
     if ("error" in parsed) {
       setError(parsed.error);
       return;
@@ -426,13 +473,53 @@ function SharedMcpServerForm({
             {...field("url")}
           />
         </div>
-        <Textarea
-          size="sm"
-          rows={2}
-          placeholder="Optional headers, one per line: Authorization: Bearer …"
-          aria-label="Server headers"
-          {...field("headers")}
-        />
+        {apiToken === null ? (
+          <Textarea
+            size="sm"
+            rows={2}
+            placeholder="Optional headers, one per line: Authorization: Bearer …"
+            aria-label="Server headers"
+            {...field("headers")}
+          />
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Input
+              className="w-56"
+              size="sm"
+              type="email"
+              placeholder="you@company.com"
+              aria-label="Atlassian account email"
+              value={apiToken.email}
+              onChange={(event) => {
+                const email = event.currentTarget.value;
+                setApiToken((current) => current && { ...current, email });
+              }}
+            />
+            <Input
+              className="min-w-48 flex-1"
+              size="sm"
+              type="password"
+              placeholder="Atlassian API token"
+              aria-label="Atlassian API token"
+              value={apiToken.token}
+              onChange={(event) => {
+                const token = event.currentTarget.value;
+                setApiToken((current) => current && { ...current, token });
+              }}
+            />
+          </div>
+        )}
+        {editing === undefined ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            Atlassian (Jira, Confluence):
+            <Button size="xs" variant="outline" onClick={() => fillAtlassian(true)}>
+              API token
+            </Button>
+            <Button size="xs" variant="outline" onClick={() => fillAtlassian(false)}>
+              OAuth
+            </Button>
+          </div>
+        ) : null}
         <button type="submit" hidden />
       </form>
     </SettingsRow>

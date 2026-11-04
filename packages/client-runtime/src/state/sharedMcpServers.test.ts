@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  ATLASSIAN_MCP_URL,
+  atlassianBasicAuthHeader,
+  atlassianV2Url,
   parseSharedMcpServerDraft,
   sharedMcpServerDraft,
   upsertSharedMcpServer,
@@ -86,5 +89,20 @@ describe("parseSharedMcpServerDraft", () => {
     });
     if (!("server" in parsed)) return;
     expect(upsertSharedMcpServer([gateway], parsed.server, gateway)).toEqual([parsed.server]);
+  });
+});
+
+describe("Atlassian quick-fill", () => {
+  it("encodes the email and API token as UTF-8 Basic auth", () => {
+    expect(atlassianBasicAuthHeader(" jürgen@example.com ", "tok:en ")).toBe(
+      `Authorization: Basic ${Buffer.from("jürgen@example.com:tok:en").toString("base64")}`,
+    );
+  });
+
+  it("moves only Atlassian's v1 endpoints to v2", () => {
+    expect(atlassianV2Url("https://mcp.atlassian.com/v1/sse")).toBe(ATLASSIAN_MCP_URL);
+    expect(atlassianV2Url("https://mcp.atlassian.com/v1/mcp/authv2")).toBe(ATLASSIAN_MCP_URL);
+    expect(atlassianV2Url(ATLASSIAN_MCP_URL)).toBeNull();
+    expect(atlassianV2Url("https://mcp.atlassian.com/v10/mcp")).toBeNull();
   });
 });

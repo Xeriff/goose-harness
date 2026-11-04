@@ -30,6 +30,7 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
 import * as RuntimeLayer from "../orchestration-v2/runtimeLayer.ts";
+import * as GooseSharedMcp from "./GooseSharedMcp.ts";
 import {
   type DiscoveredPlugin,
   type DiscoveryProblem,
@@ -164,6 +165,7 @@ export const make = Effect.fn("GooseExtensionHost.make")(function* (
   const config = yield* ServerConfig.ServerConfig;
   const secretStore = yield* ServerSecretStore.ServerSecretStore;
   const eventSink = yield* EventSink.EventSinkV2;
+  const sharedMcp = yield* GooseSharedMcp.make;
   const services = yield* Effect.context<never>();
   const runFork = Effect.runForkWith(services);
   const runPromise = Effect.runPromiseWith(services);
@@ -341,6 +343,9 @@ export const make = Effect.fn("GooseExtensionHost.make")(function* (
             definition,
           });
         },
+        servers: () => runPromise(sharedMcp.servers()),
+        listTools: (server) => runPromise(sharedMcp.listTools(server)),
+        callTool: (server, tool, args = {}) => runPromise(sharedMcp.callTool(server, tool, args)),
       },
     };
 
