@@ -12,6 +12,8 @@
         // CodeRabbit loads its configuration by filename.
         ".coderabbit.config.ts",
         ".github/scripts/thread-transfer-report.cjs",
+        // Goose Harness drops upstream's workflows, which were the callers of these scripts.
+        ".github/scripts/*.cjs",
       ],
       "vite": { "entry": [".github/**/*.test.cjs"] },
       "vitest": { "entry": [".github/**/*.test.cjs"] },
@@ -36,6 +38,8 @@
         "prepare-server-compile-cache.cjs",
         "smoke-desktop-app.ts",
         "verify-windows-desktop-artifact.ts",
+        // Goose Harness drops upstream's workflows, which run release scripts directly.
+        "*.ts",
       ],
       "ignoreDependencies": ["agent-device", "esbuild"],
       // The `t3` npm package's files: copied into the package, never imported.
@@ -95,7 +99,8 @@
     "apps/web": {
       // Worktree setup (scripts/setup-worktree.ts) runs this directly, and evidence
       // fixtures run under node.
-      "entry": ["scripts/warm-dep-cache.ts", "test/fixtures/**/*.mjs"],
+      // Goose Harness drops upstream's workflows, which ran scripts/*.ts directly.
+      "entry": ["scripts/warm-dep-cache.ts", "test/fixtures/**/*.mjs", "scripts/*.ts"],
       // UI component modules are copied and adapted as cohesive sets. Keep their
       // named subcomponents even before they have callers; the file audit still
       // reports an entire component module when nothing imports it.

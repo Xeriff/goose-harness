@@ -71,6 +71,7 @@ import * as ProviderInstanceRegistryHydration from "./provider/ProviderInstanceR
 import * as ProjectSettingsOverrideSweep from "./provider/ProjectSettingsOverrideSweep.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
+import * as Goose from "./goose/index.ts";
 import * as PeerForwarding from "./peer/PeerForwarding.ts";
 import * as RemoteDelegation from "./peer/RemoteDelegation.ts";
 import * as PeerLinkRequests from "./peer/PeerLinkRequests.ts";
@@ -775,6 +776,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ServerBrowserStream.routeLayer,
     ServerHttp.layerStaticAndDevRoute,
     Ws.layer,
+    Goose.httpLayer,
   ),
   McpHttpServer.layer.pipe(
     Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
@@ -809,6 +811,7 @@ const layerMakeRoutes = Layer.mergeAll(
     ),
   ),
   Layer.provide(PreviewAutomationBroker.layer),
+  Layer.provide(Goose.hostLayer),
   Layer.provide(ServerSelfUpdate.layer.pipe(Layer.provide(layerDesktopAppUpdate))),
   Layer.provide(layerCommandReadiness),
   Layer.provide(ServerHttp.layerBrowserApiCors),
