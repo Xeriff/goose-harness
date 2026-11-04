@@ -13,7 +13,7 @@ conflicts: this `goose/` folder, `.github/README.md`, and `.github/workflows/goo
 runs every day at 04:17 UTC and on demand (Actions → Upstream sync → Run workflow).
 It runs [`goose/sync/sync.sh`](sync/sync.sh), which:
 
-1. Fetches `pingdotgg/t3code` `main` (the branch nightly builds come from).
+1. Fetches `pingdotgg/t3code` `main` (the branch nightly builds come from) and mirrors its tags.
 2. Merges it into our `main`. If `main` already contains it, it stops there.
 3. Clears merge noise automatically, and lists each item in the merge commit or PR:
    - **Upstream workflows** are kept out of our tree. Upstream's CI needs their

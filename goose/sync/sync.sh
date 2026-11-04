@@ -56,6 +56,15 @@ git fetch --no-tags --quiet upstream "+refs/heads/$UPSTREAM_BRANCH:refs/remotes/
 git fetch --no-tags --quiet origin "+refs/heads/$TARGET_BRANCH:refs/remotes/origin/$TARGET_BRANCH"
 git fetch --no-tags --quiet origin "+refs/heads/$SYNC_BRANCH:refs/remotes/origin/$SYNC_BRANCH" 2>/dev/null || true
 
+# Mirror upstream's release and nightly tags. Not fatal: a tag upstream moved
+# (rare) is left as it is and reported.
+if [[ "$DRY_RUN" != 1 ]]; then
+  git fetch --quiet upstream 'refs/tags/*:refs/tags/*' 2>"$WORK/tags.log" || true
+  if ! git push --quiet origin --tags 2>>"$WORK/tags.log"; then
+    printf '::warning::Some upstream tags could not be pushed:\n%s\n' "$(tail -n 20 "$WORK/tags.log")" >&2
+  fi
+fi
+
 UP_SHA="$(git rev-parse "upstream/$UPSTREAM_BRANCH")"
 BASE_SHA="$(git rev-parse "origin/$TARGET_BRANCH")"
 git checkout --quiet -B "$TARGET_BRANCH" "$BASE_SHA"
