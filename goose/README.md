@@ -64,3 +64,37 @@ and closes the PR.
 - A full check run takes a while on a standard runner and counts against the
   account's private-repo Actions minutes. Days with no upstream change cost
   under a minute.
+
+## Plugins
+
+The server loads plugins at startup from `plugins/` in this repo, from
+`<T3 home>/goose/plugins`, and from any folders listed in `GOOSE_PLUGIN_DIRS`.
+A plugin is a folder with a `package.json` whose `goose` field is its manifest:
+
+```json
+{
+  "name": "hello",
+  "version": "0.1.0",
+  "goose": {
+    "id": "hello",
+    "displayName": "Hello",
+    "apiVersion": 1,
+    "server": "./server.ts",
+    "enabledByDefault": true
+  }
+}
+```
+
+The server entry's default export has an `activate(ctx)` function. The API is in
+[`packages/goose-plugin-api`](../packages/goose-plugin-api/src/index.ts):
+HTTP routes under `/api/goose/plugins/<id>/`, tools that every agent gets through
+T3 Code's MCP server, read-only agent events, per-plugin settings, storage and secrets.
+
+- A plugin that throws or takes longer than 10 seconds to activate is marked failed;
+  the others keep running. Failing routes, tools and event handlers are logged, not fatal.
+- `GET /api/goose/host/plugins` lists plugins and their state.
+  `PUT /api/goose/host/plugins/<id>/enabled` with `{"enabled": false}` turns one off from
+  the next restart.
+- Plugins run with the server's full permissions. Install only plugins you trust.
+
+The host lives in `apps/server/src/goose/`. Upstream files touched: `server.ts` (3 lines), `mcp/McpHttpServer.ts` (2 lines), `apps/server/package.json` and `knip.jsonc`.

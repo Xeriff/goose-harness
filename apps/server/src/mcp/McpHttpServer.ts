@@ -78,6 +78,7 @@ import {
 } from "./toolkits/device/tools.ts";
 import * as HtmlHandlers from "./toolkits/html/handlers.ts";
 import { HtmlPreviewTool, HtmlPreviewToolkit, HtmlRenderToolkit } from "./toolkits/html/tools.ts";
+import * as GooseMcpTools from "../goose/GooseMcpTools.ts";
 import { requestUrl } from "../requestUrl.ts";
 
 const mcpResourceMetadataUrl = (request: HttpServerRequest.HttpServerRequest) =>
@@ -1207,4 +1208,5 @@ export const layerTools = Layer.mergeAll(
   layerHtmlToolkit,
 );
 
-export const layer = layerMcpTransport(layerTools);
+// Goose Harness: plugin tools join the same server, outside layerTools so its tests need no plugin host.
+export const layer = layerMcpTransport(Layer.merge(layerTools, GooseMcpTools.layer));
