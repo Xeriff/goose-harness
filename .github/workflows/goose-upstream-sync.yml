@@ -1,0 +1,68 @@
+# Daily merge of upstream T3 Code (pingdotgg/t3code main, the nightly line)
+# into our main. Logic lives in goose/sync/sync.sh; see goose/README.md.
+name: Upstream sync
+
+on:
+  schedule:
+    - cron: "17 4 * * *" # 04:17 UTC daily, after upstream's overnight nightlies
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Merge and run checks, but do not push or touch PRs
+        type: boolean
+        default: false
+      skip_checks:
+        description: Skip install/build/test (pushes a clean merge unchecked)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: goose-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Merge upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      # SYNC_TOKEN is a fine-grained PAT (Contents, Pull requests, Workflows:
+      # read/write on this repo). The default GITHUB_TOKEN cannot push commits
+      # that touch .github/workflows, and upstream history does.
+      - name: Check token
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          if [[ -z "$SYNC_TOKEN" ]]; then
+            echo "::error::Add a SYNC_TOKEN repository secret (see goose/README.md)."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      # Reuses upstream's own toolchain setup (Vite+, Node, pnpm), so Node and
+      # pnpm bumps upstream are picked up without changes here.
+      - name: Setup toolchain
+        if: ${{ !inputs.skip_checks }}
+        uses: ./.github/actions/setup-ci-deps
+        with:
+          install: "false"
+
+      - name: Sync
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+          SYNC_INSTALL_CMD: ${{ !inputs.skip_checks && 'vp install' || '' }}
+          SYNC_BUILD_CMD: ${{ !inputs.skip_checks && 'vp run build' || '' }}
+          # Browser tests need Chromium from the repo's own Playwright version.
+          SYNC_TEST_CMD: ${{ !inputs.skip_checks && 'node apps/web/node_modules/playwright/cli.js install --with-deps --only-shell chromium && vp run typecheck && vp run test' || '' }}
+        run: goose/sync/sync.sh
