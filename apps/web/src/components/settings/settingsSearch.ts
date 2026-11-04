@@ -29,6 +29,7 @@ export type SettingsPath =
   | "/settings/browser"
   | "/settings/devices"
   | "/settings/mcp-servers"
+  | "/settings/plugins"
   | "/settings/scheduled-tasks"
   | "/settings/source-control"
   | "/settings/worktrees"
@@ -100,6 +101,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/browser": "Browser",
   "/settings/devices": "Devices",
   "/settings/mcp-servers": "MCP servers",
+  "/settings/plugins": "Plugins",
   "/settings/scheduled-tasks": "Scheduled tasks",
   "/settings/source-control": "Source control",
   "/settings/worktrees": "Worktrees",
@@ -136,6 +138,7 @@ export const SETTINGS_NAV_GROUPS: ReadonlyArray<{
       "/settings/browser",
       "/settings/devices",
       "/settings/mcp-servers",
+      "/settings/plugins",
       "/settings/scheduled-tasks",
     ],
   },
@@ -845,6 +848,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["mcp model context protocol gateway tools add server claude codex cursor"],
   },
   {
+    id: "goose-plugins",
+    title: "Plugins",
+    to: "/settings/plugins",
+    searchTerms: ["goose plugins extensions add-ons enable disable tools"],
+  },
+  {
     id: "agent-browser-access",
     title: "Agent browser access",
     to: "/settings/browser",
@@ -1214,6 +1223,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/browser": null,
   "/settings/devices": null,
   "/settings/mcp-servers": null,
+  "/settings/plugins": null,
   "/settings/source-control": "environment-defaults",
   "/settings/worktrees": "project-defaults",
   "/settings/connections": "connections",

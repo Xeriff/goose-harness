@@ -318,6 +318,41 @@ describe("thread context authorization", () => {
   );
 });
 
+it.effect("lets read access call a plugin's GET routes but not the routes that change things", () =>
+  Effect.gen(function* () {
+    const group = WsRpcGroup.omit(
+      ...[...WsRpcGroup.requests.keys()].filter(
+        (
+          tag,
+        ): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof WS_METHODS.goosePluginRequest> =>
+          tag !== WS_METHODS.goosePluginRequest,
+      ),
+    );
+    const handled: string[] = [];
+    const client = yield* RpcTest.makeClient(group).pipe(
+      Effect.provide(
+        Layer.merge(
+          group.toLayerHandler(WS_METHODS.goosePluginRequest, ({ method }) =>
+            Effect.sync(() => {
+              handled.push(method);
+              return { status: 200, body: null };
+            }),
+          ),
+          RpcAuthorization.layer([AuthOrchestrationReadScope]),
+        ),
+      ),
+    );
+    const request = { pluginId: "board", path: "/cards" };
+    yield* client[WS_METHODS.goosePluginRequest]({ ...request, method: "GET" });
+    expect(
+      yield* client[WS_METHODS.goosePluginRequest]({ ...request, method: "POST" }).pipe(
+        Effect.flip,
+      ),
+    ).toMatchObject({ requiredPermission: AuthOrchestrationOperateScope });
+    expect(handled).toEqual(["GET"]);
+  }).pipe(Effect.scoped),
+);
+
 it.effect("separates host file URLs from readable attachment URLs", () =>
   Effect.gen(function* () {
     const group = WsRpcGroup.omit(

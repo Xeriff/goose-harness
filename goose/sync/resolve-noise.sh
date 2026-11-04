@@ -10,6 +10,11 @@ source goose/sync/lib.sh
 git rev-parse -q --verify MERGE_HEAD >/dev/null || { echo "No merge in progress." >&2; exit 1; }
 resolve_noise
 [[ "$REGEN_LOCKFILE" == 1 ]] && regenerate_lockfile
+if [[ -d node_modules ]]; then
+  bash -c "$ROUTES_REGEN_CMD" && echo "regenerated: apps/web/src/routeTree.gen.ts"
+else
+  echo "Run vp install, then: $ROUTES_REGEN_CMD"
+fi
 for r in "${AUTO_RESOLVED[@]}"; do echo "resolved: ${r//\`/}"; done
 left="$(git diff --name-only --diff-filter=U)"
 if [[ -n "$left" ]]; then

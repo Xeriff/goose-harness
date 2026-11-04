@@ -187,6 +187,8 @@ import * as ServerSettings from "./serverSettings.ts";
 import { invalidateSettingsSecrets } from "./sourceControl/sourceControlHostSecrets.ts";
 import * as DatabaseStorage from "./persistence/DatabaseStorage.ts";
 import * as SharedMcpServerProbe from "./mcp/SharedMcpServerProbe.ts";
+import * as GooseExtensionHost from "./goose/GooseExtensionHost.ts";
+import * as GooseRpc from "./goose/GooseRpc.ts";
 import * as StorageCleanup from "./storageCleanup.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import { terminalOutputStream, withTerminalOutputWindow } from "./terminal/OutputProtocol.ts";
@@ -1467,6 +1469,7 @@ export const layerWsRpc = (
       const peerLinks = yield* PeerLinks.PeerLinks;
       const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
       const sharedMcpServerProbe = yield* SharedMcpServerProbe.SharedMcpServerProbe;
+      const gooseHandlers = yield* GooseRpc.handlers;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -2644,6 +2647,7 @@ export const layerWsRpc = (
           }),
         [WS_METHODS.serverTestSharedMcpServer]: ({ name }) => sharedMcpServerProbe.test({ name }),
         [WS_METHODS.serverSignInSharedMcpServer]: (input) => sharedMcpServerProbe.signIn(input),
+        ...gooseHandlers,
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
           TraceDiagnostics.readTraceDiagnostics({
@@ -3427,6 +3431,7 @@ export const layer = Layer.unwrap(
     const reviewGuides = yield* PullRequestReviewGuideService.PullRequestReviewGuideService;
     const peerLinks = yield* PeerLinks.PeerLinks;
     const peerLinkRequests = yield* PeerLinkRequests.PeerLinkRequests;
+    const gooseHost = yield* GooseExtensionHost.GooseExtensionHost;
     const sql = yield* SqlClient.SqlClient;
     return HttpRouter.add(
       "GET",
@@ -3516,6 +3521,7 @@ export const layer = Layer.unwrap(
               ),
               Layer.provide(Layer.succeed(PeerLinks.PeerLinks, peerLinks)),
               Layer.provide(Layer.succeed(PeerLinkRequests.PeerLinkRequests, peerLinkRequests)),
+              Layer.provide(Layer.succeed(GooseExtensionHost.GooseExtensionHost, gooseHost)),
               Layer.provide(
                 SourceControlDiscovery.layer.pipe(
                   Layer.provide(

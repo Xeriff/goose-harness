@@ -21,7 +21,9 @@ It runs [`goose/sync/sync.sh`](sync/sync.sh), which:
      `goose-*` workflows run.
    - **`pnpm-lock.yaml`**: on conflict it takes upstream's lockfile and regenerates
      it against the merged `package.json` files.
-   - **Generated files** (`*.graphql.ts`, `schema/`): on conflict it takes upstream's copy.
+   - **Generated files** (`*.graphql.ts`, `schema/`, the web route tree): on conflict it
+     takes upstream's copy. The route tree is then rebuilt after install, so routes
+     our plugins add come back.
 4. If no other conflict is left, it commits the merge and runs install, build,
    typecheck and tests with upstream's own toolchain setup.
 5. **All green:** pushes `main`. No approval needed.

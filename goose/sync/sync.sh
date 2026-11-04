@@ -165,6 +165,11 @@ else
   git commit --quiet --no-verify -F "$WORK/commit-msg"
   MERGE_SHA="$(git rev-parse HEAD)"
   run_step install "$SYNC_INSTALL_CMD"
+  run_step routes "$ROUTES_REGEN_CMD"
+  if [[ -z "$FAILED_STEP" ]] && ! git diff --cached --quiet; then
+    git commit --quiet --no-verify --amend --no-edit
+    MERGE_SHA="$(git rev-parse HEAD)"
+  fi
   run_step build "$SYNC_BUILD_CMD"
   run_step test "$SYNC_TEST_CMD"
   # Checks must not leave edits behind (e.g. an install rewriting the lockfile).

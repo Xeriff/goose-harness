@@ -4,7 +4,8 @@
 # pnpm lockfiles and generated files. Anything else is left conflicted.
 
 # Space-separated globs treated as generated (mirrors .gitattributes).
-GENERATED_PATHS="${GENERATED_PATHS:-packages/source-control-github/schema/** apps/server/schema/** **/*.graphql.ts}"
+# The web route tree is rebuilt after install (regenerate_routes) so our routes come back.
+GENERATED_PATHS="${GENERATED_PATHS:-packages/source-control-github/schema/** apps/server/schema/** **/*.graphql.ts apps/web/src/routeTree.gen.ts}"
 # Regenerates pnpm-lock.yaml without installing anything, with the pnpm
 # version pinned in package.json so the lockfile format matches upstream.
 LOCKFILE_REGEN_CMD="${LOCKFILE_REGEN_CMD:-npx --yes \"\$(jq -r .packageManager package.json)\" install --lockfile-only --ignore-scripts}"
@@ -50,3 +51,7 @@ resolve_noise() {
 regenerate_lockfile() {
   bash -c "$LOCKFILE_REGEN_CMD" && git add -- pnpm-lock.yaml
 }
+
+# Needs installed dependencies. A text merge of the route tree can be clean and
+# still wrong, so it is rebuilt from the merged route files on every sync.
+ROUTES_REGEN_CMD="node goose/sync/gen-routes.mjs && git add -- apps/web/src/routeTree.gen.ts"

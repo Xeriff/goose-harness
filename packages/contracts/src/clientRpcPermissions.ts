@@ -10,6 +10,7 @@ import {
   AuthTerminalOperateScope,
   type AuthEnvironmentScope,
 } from "./auth.ts";
+import { GoosePluginRequestInput } from "./goose.ts";
 import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
 import { WS_METHODS } from "./rpc.ts";
 
@@ -73,11 +74,15 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerLinksUnlink]: AuthAccessWriteScope,
   // A link lets every agent here reach the other environment: Settings' bar.
   [WS_METHODS.peerLinksAnswerRequest]: AuthAccessWriteScope,
+  // Goose plugins: a plugin route that reads needs only read access (see clientRpcRequiredScopes).
+  [WS_METHODS.gooseSetPluginEnabled]: AuthSettingsWriteScope,
+  [WS_METHODS.goosePluginRequest]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
 const decodePrepareThread = Schema.decodeUnknownSync(GitPreparePullRequestThreadInput);
 const decodeStackedAction = Schema.decodeUnknownSync(GitRunStackedActionInput);
+const decodeGooseRequest = Schema.decodeUnknownSync(GoosePluginRequestInput);
 
 export function clientRpcRequiredScopes(
   method: string,
@@ -95,6 +100,13 @@ export function clientRpcRequiredScopes(
       (payload.action === "create_pr" || payload.action === "commit_push_pr")
     )
       return [AuthSourceControlWriteScope, AuthOrchestrationReadScope];
+  }
+  if (
+    method === WS_METHODS.goosePluginRequest &&
+    input !== undefined &&
+    decodeGooseRequest(input).method === "GET"
+  ) {
+    return [AuthOrchestrationReadScope];
   }
   return Object.hasOwn(CLIENT_GUARDED_RPC_SCOPES, method)
     ? [CLIENT_GUARDED_RPC_SCOPES[method as ClientGuardedRpcTag]]

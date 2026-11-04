@@ -1088,6 +1088,9 @@ importers:
       '@t3tools/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@t3tools/goose-plugin-api':
+        specifier: workspace:*
+        version: link:../../packages/goose-plugin-api
       '@t3tools/provider-core':
         specifier: workspace:*
         version: link:../../packages/provider-core
@@ -1631,6 +1634,9 @@ importers:
       '@types/node':
         specifier: 24.12.4
         version: 24.12.4
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.3.0
 
   packages/provider-acp:
     dependencies:
