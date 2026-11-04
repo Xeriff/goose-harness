@@ -407,6 +407,13 @@ import {
   SourceControlSignInResult,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import {
+  GoosePluginError,
+  GoosePluginList,
+  GoosePluginRequestInput,
+  GoosePluginResponse,
+  GoosePluginSetEnabledInput,
+} from "./goose.ts";
 import { Project, ProjectMutation, ProjectMutationError } from "./project.ts";
 
 export const WS_METHODS = {
@@ -518,6 +525,10 @@ export const WS_METHODS = {
   peerLinksAnswerRequest: "peerLinks.answerRequest",
   serverUpdateSettings: "server.updateSettings",
   serverTestSharedMcpServer: "server.testSharedMcpServer",
+  // Goose Harness plugins.
+  gooseListPlugins: "goose.listPlugins",
+  gooseSetPluginEnabled: "goose.setPluginEnabled",
+  goosePluginRequest: "goose.pluginRequest",
   serverSignInSharedMcpServer: "server.signInSharedMcpServer",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
@@ -824,6 +835,24 @@ const WsPeerLinksUnlinkRpc = Rpc.make(WS_METHODS.peerLinksUnlink, {
 const WsPeerLinksAnswerRequestRpc = Rpc.make(WS_METHODS.peerLinksAnswerRequest, {
   payload: PeerLinkRequestAnswerInput,
   error: Schema.Union([PeerLinkRequestError, EnvironmentAuthorizationError]),
+});
+
+const WsGooseListPluginsRpc = Rpc.make(WS_METHODS.gooseListPlugins, {
+  payload: Schema.Struct({}),
+  success: GoosePluginList,
+  error: EnvironmentAuthorizationError,
+});
+
+const WsGooseSetPluginEnabledRpc = Rpc.make(WS_METHODS.gooseSetPluginEnabled, {
+  payload: GoosePluginSetEnabledInput,
+  success: Schema.Struct({ restartRequired: Schema.Boolean }),
+  error: Schema.Union([GoosePluginError, EnvironmentAuthorizationError]),
+});
+
+const WsGoosePluginRequestRpc = Rpc.make(WS_METHODS.goosePluginRequest, {
+  payload: GoosePluginRequestInput,
+  success: GoosePluginResponse,
+  error: Schema.Union([GoosePluginError, EnvironmentAuthorizationError]),
 });
 
 const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
@@ -2044,6 +2073,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsPeerLinksUnlinkRpc,
   WsPeerLinksAnswerRequestRpc,
   WsServerTestSharedMcpServerRpc,
+  WsGooseListPluginsRpc,
+  WsGooseSetPluginEnabledRpc,
+  WsGoosePluginRequestRpc,
   WsServerSignInSharedMcpServerRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerSearchAcpRegistryRpc,

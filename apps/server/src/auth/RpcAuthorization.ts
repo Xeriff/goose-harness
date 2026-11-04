@@ -92,6 +92,10 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.serverTestSharedMcpServer]: AuthSettingsWriteScope,
   // Registers T3 as an OAuth client of the server and stores its tokens.
   [WS_METHODS.serverSignInSharedMcpServer]: AuthSettingsWriteScope,
+  // Goose plugins; a plugin request's scope depends on its method (clientRpcRequiredScopes).
+  [WS_METHODS.gooseListPlugins]: AuthOrchestrationReadScope,
+  [WS_METHODS.gooseSetPluginEnabled]: AuthSettingsWriteScope,
+  [WS_METHODS.goosePluginRequest]: AuthOrchestrationOperateScope,
   [WS_METHODS.serverSearchAcpRegistry]: AuthOrchestrationReadScope,
   [WS_METHODS.serverPrepareAcpRegistryAgent]: AuthProvidersManageScope,
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: AuthProvidersManageScope,
