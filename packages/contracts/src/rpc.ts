@@ -358,6 +358,10 @@ import {
   ServerSettings,
   ServerSettingsError,
   ServerSettingsPatch,
+  SharedMcpServerName,
+  SharedMcpServerSignInResult,
+  SharedMcpServerTestError,
+  SharedMcpServerTestResult,
 } from "./settings.ts";
 import {
   ScheduledTaskDeleteInput,
@@ -513,6 +517,8 @@ export const WS_METHODS = {
   peerLinksUnlink: "peerLinks.unlink",
   peerLinksAnswerRequest: "peerLinks.answerRequest",
   serverUpdateSettings: "server.updateSettings",
+  serverTestSharedMcpServer: "server.testSharedMcpServer",
+  serverSignInSharedMcpServer: "server.signInSharedMcpServer",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverSearchAcpRegistry: "server.searchAcpRegistry",
   serverPrepareAcpRegistryAgent: "server.prepareAcpRegistryAgent",
@@ -827,6 +833,22 @@ const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSettings, {
   }),
   success: ServerSettings,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+const WsServerTestSharedMcpServerRpc = Rpc.make(WS_METHODS.serverTestSharedMcpServer, {
+  payload: Schema.Struct({ name: SharedMcpServerName }),
+  success: SharedMcpServerTestResult,
+  error: Schema.Union([SharedMcpServerTestError, EnvironmentAuthorizationError]),
+});
+
+const WsServerSignInSharedMcpServerRpc = Rpc.make(WS_METHODS.serverSignInSharedMcpServer, {
+  payload: Schema.Struct({
+    name: SharedMcpServerName,
+    /** The environment's HTTP origin as the browser reaches it; the provider redirects back there. */
+    redirectBaseUrl: TrimmedNonEmptyString,
+  }),
+  success: SharedMcpServerSignInResult,
+  error: Schema.Union([SharedMcpServerTestError, EnvironmentAuthorizationError]),
 });
 
 const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
@@ -2021,6 +2043,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsPeerLinksLinkRpc,
   WsPeerLinksUnlinkRpc,
   WsPeerLinksAnswerRequestRpc,
+  WsServerTestSharedMcpServerRpc,
+  WsServerSignInSharedMcpServerRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerSearchAcpRegistryRpc,
   WsServerPrepareAcpRegistryAgentRpc,

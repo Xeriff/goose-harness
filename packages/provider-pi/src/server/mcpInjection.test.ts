@@ -3,6 +3,7 @@ import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts"
 
 import {
   T3_MCP_BEARER_ENV,
+  T3_MCP_SHARED_SERVERS_ENV,
   T3_MCP_URL_ENV,
   T3_PI_RUNTIME_MODE_ENV,
   T3_PI_MCP_EXTENSION_PATH_ENV,
@@ -84,6 +85,29 @@ describe("pi T3 MCP injection", () => {
       permissionOnly.env[T3_PI_MCP_EXTENSION_PATH_ENV],
       "/tmp/cache/pi-t3-mcp-extension.ts",
     );
+  });
+
+  it("passes the thread's shared MCP servers to the extension only with T3's", () => {
+    const gateway = {
+      name: "gateway",
+      url: "http://127.0.0.1:43123/mcp/shared/gateway",
+      headers: { Authorization: "Bearer secret-pi-token" },
+    };
+    const launch = buildPiRpcLaunch({
+      launchArgs: [],
+      environment: { [T3_MCP_SHARED_SERVERS_ENV]: "[]" },
+      mcpSession: { ...mcpSession, sharedServers: [gateway] },
+      extensionPath: "/tmp/cache/pi-t3-mcp-extension.ts",
+    });
+    assert.deepEqual(JSON.parse(launch.env[T3_MCP_SHARED_SERVERS_ENV] ?? ""), [gateway]);
+    const withoutT3 = buildPiRpcLaunch({
+      launchArgs: [],
+      environment: { [T3_MCP_SHARED_SERVERS_ENV]: "[]" },
+      mcpSession: { ...mcpSession, sharedServers: [gateway] },
+      extensionPath: "/tmp/cache/pi-t3-mcp-extension.ts",
+      disableExtensions: true,
+    });
+    assert.isUndefined(withoutT3.env[T3_MCP_SHARED_SERVERS_ENV]);
   });
 
   it("forces tools and user extensions off for unattended text generation", () => {

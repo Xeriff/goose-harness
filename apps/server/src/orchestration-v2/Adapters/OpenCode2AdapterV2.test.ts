@@ -94,7 +94,16 @@ const mcpRules = [
   { action: "t3-code-*", resource: "*", effect: "deny" },
   { action: "t3-code-thread_opencode2-adapter_*", resource: "*", effect: "allow" },
 ];
-const t3Rules = [{ action: "*", resource: "*", effect: "allow" }, ...mcpRules];
+/** Other threads' shared MCP servers are denied; this thread's run under the mode. */
+const sharedRules = (effect: "allow" | "ask", thread = "thread_opencode2-adapter") => [
+  { action: "t3-shared-*", resource: "*", effect: "deny" },
+  { action: `t3-shared-${thread}_*`, resource: "*", effect },
+];
+const t3Rules = [
+  { action: "*", resource: "*", effect: "allow" },
+  ...sharedRules("allow"),
+  ...mcpRules,
+];
 const TITLE = "Prime check";
 const sessionInfo = (overrides: Record<string, unknown> = {}) => ({
   id: SESSION,
@@ -165,7 +174,8 @@ const withInstructions = (
         "skill.list",
       ].includes(String(entry.frame.type)),
   );
-  const after = entries.findIndex(
+  // T3's MCP servers are added before the entry that describes them.
+  const after = entries.findLastIndex(
     (entry, index) =>
       index < first &&
       entry.type === "emit_inbound" &&
@@ -280,6 +290,7 @@ const supervisedRules = [
   { action: "shell", resource: "*", effect: "ask" },
   { action: "edit", resource: "*", effect: "ask" },
   { action: "external_directory", resource: "*", effect: "ask" },
+  ...sharedRules("ask"),
   ...buildPaths,
   ...mcpRules,
 ];
@@ -914,7 +925,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
         reply("session.update", null),
         out("session.update", {
           sessionID: CHILD,
-          permissions: [...supervisedRules.slice(0, 3), ...mcpRules],
+          permissions: [...supervisedRules.slice(0, 5), ...mcpRules],
         }),
         reply("session.update", null),
         out("session.prompt", { sessionID: SESSION, text: "<any>" }),
@@ -2238,9 +2249,9 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
           out("session.update", {
             sessionID: SESSION,
             permissions: [
-              ...supervisedRules.slice(0, 3),
+              ...supervisedRules.slice(0, 5),
               { action: "shell", resource: "echo *", effect: "allow" },
-              ...supervisedRules.slice(3),
+              ...supervisedRules.slice(5),
             ],
           }),
           reply("session.update", null),
@@ -2883,6 +2894,71 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect(
+    "adds the thread's shared MCP servers next to T3's, retries a refused one, and removes them with it",
+    () =>
+      Effect.gen(function* () {
+        const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+        yield* mcpSessions.set({
+          environmentId: EnvironmentId.make("environment:opencode2-adapter"),
+          threadId,
+          providerSessionId: "mcp:opencode2-adapter",
+          providerInstanceId: instanceId,
+          endpoint: "http://127.0.0.1:3773/mcp",
+          authorizationHeader: "Bearer thread-credential",
+          browserToolsAvailable: false,
+          sharedServers: [
+            {
+              name: "gateway",
+              url: "http://127.0.0.1:3773/mcp/shared/gateway",
+              headers: { Authorization: "Bearer thread-credential" },
+            },
+          ],
+        });
+        yield* Effect.addFinalizer(() => mcpSessions.clear(threadId));
+        const server = "t3-code-thread_opencode2-adapter";
+        const gateway = "t3-shared-thread_opencode2-adapter_gateway";
+        const addGateway = out("mcp.add", {
+          server: gateway,
+          "location[directory]": WORK,
+          config: {
+            type: "remote",
+            url: "http://127.0.0.1:3773/mcp/shared/gateway",
+            headers: { Authorization: "Bearer thread-credential" },
+            oauth: false,
+          },
+        });
+        const turn = [
+          out("session.prompt", { sessionID: SESSION, text: "<any>" }),
+          promptAccepted,
+          event("session.execution.succeeded", { sessionID: SESSION }),
+        ];
+        const { runtime, thread } = yield* resumed([
+          out("mcp.add", { server, "location[directory]": WORK, config: "<any>" }),
+          reply("mcp.add", null),
+          addGateway,
+          // A shared server OpenCode refuses is skipped; the turn still runs.
+          reply("mcp.add", { status: 500, body: { message: "add failed" } }),
+          ...turn,
+          out("mcp.add", { server, "location[directory]": WORK, config: "<any>" }),
+          reply("mcp.add", null),
+          addGateway,
+          reply("mcp.add", null),
+          ...turn,
+          out("mcp.remove", { server, "location[directory]": WORK }),
+          reply("mcp.remove", null),
+          out("mcp.remove", { server: gateway, "location[directory]": WORK }),
+          reply("mcp.remove", null),
+        ]);
+        for (let index = 0; index < 2; index++) {
+          const terminal = yield* terminalOf(runtime).pipe(Effect.forkScoped);
+          yield* runtime.startTurn(turnInput(thread));
+          assert.equal((yield* Fiber.join(terminal))?.status, "completed");
+        }
+        yield* runtime.unloadThread!({ providerThread: thread });
+      }).pipe(Effect.scoped),
+  );
+
   it.effect("registers a long thread id's MCP server under a name OpenCode accepts", () =>
     Effect.gen(function* () {
       const child = ThreadId.make(
@@ -2908,6 +2984,8 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
           sessionInfo({
             permissions: [
               { action: "*", resource: "*", effect: "allow" },
+              // Shared servers' prefix is shortened the same way as T3's name.
+              ...sharedRules("allow", "aa73fa1e03099934"),
               { action: "t3-code-*", resource: "*", effect: "deny" },
               { action: `${server}_*`, resource: "*", effect: "allow" },
             ],
@@ -4424,6 +4502,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
           sessionID: FORK,
           permissions: [
             { action: "*", resource: "*", effect: "allow" },
+            ...sharedRules("allow", "thread_opencode2-adapter_fork"),
             { action: "t3-code-*", resource: "*", effect: "deny" },
             { action: "t3-code-thread_opencode2-adapter_fork_*", resource: "*", effect: "allow" },
           ],

@@ -85,6 +85,8 @@ yay -S t3code-nightly-bin
 
 The AUR packaging is maintained in this repository under [`packaging/aur`](./packaging/aur).
 
+<<<<<<< HEAD
+
 #### Nix (nixpkgs)
 
 ```bash
@@ -94,6 +96,18 @@ nix profile add github:NixOS/nixpkgs/nixos-unstable#t3code
 The package is maintained in [nixpkgs](https://github.com/NixOS/nixpkgs/tree/nixos-unstable/pkgs/by-name/t3/t3code)
 and includes the desktop app (`t3code-desktop`) and the `t3` command.
 See [Nix installation](./docs/user/install.md#nix-nixpkgs) for NixOS configuration and updates.
+=======
+
+## Share MCP servers with every agent
+
+Add an MCP server once in **Settings → MCP servers**, and every new agent session can use its tools, whichever provider runs it. T3 Code connects to the server for the agents, so logins stay in T3 Code:
+
+- **OAuth servers** such as Linear (`https://mcp.linear.app/mcp`), Notion (`https://mcp.notion.com/mcp`), or Sentry (`https://mcp.sentry.dev/mcp`): add the URL, then choose **Sign in** and approve in your browser. T3 Code keeps the login and refreshes it.
+- **Token servers** such as GitHub (`https://api.githubcopilot.com/mcp/`): add a header like `Authorization: Bearer <personal-token>`. It's stored as a secret.
+
+Agents never see the tokens. See [Shared MCP servers](./docs/user/shared-mcp-servers.md).
+
+> > > > > > > refs/pr/16466
 
 ## Some notes
 
@@ -113,6 +127,7 @@ Full docs live in [docs/](./docs). There's no docs site yet.
 - [Appearance preferences](./docs/user/appearance.md)
 - [Remote access from a phone or another machine](./docs/user/remote-access.md)
 - [Connect Claude Code, Codex, ChatGPT and other agents over MCP](./docs/user/outside-agents.md)
+- [Share MCP servers, including ones that need a login, with every agent](./docs/user/shared-mcp-servers.md)
 - [Keeping app and server in sync](./docs/user/updating.md)
 - [Source control integrations](./docs/user/source-control.md)
 - Multiple accounts: [Codex](./docs/user/providers-codex.md) · [Claude](./docs/user/providers-claude.md)

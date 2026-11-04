@@ -64,6 +64,8 @@ const RPC_AGGREGATES = {
   [WS_METHODS.peerLinksUnlink]: "peerLinks",
   [WS_METHODS.peerLinksAnswerRequest]: "peerLinks",
   [WS_METHODS.serverUpdateSettings]: "server",
+  [WS_METHODS.serverTestSharedMcpServer]: "server",
+  [WS_METHODS.serverSignInSharedMcpServer]: "server",
   [WS_METHODS.serverSearchAcpRegistry]: "server",
   [WS_METHODS.serverPrepareAcpRegistryAgent]: "server",
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: "server",

@@ -9,6 +9,7 @@ import type { OpencodeClient, ToolPart } from "@opencode-ai/sdk/v2";
 import { toolOutputImages } from "@t3tools/shared/toolOutput";
 import {
   CheckpointId,
+  EnvironmentId,
   NodeId,
   ProjectId,
   ProviderInstanceId,
@@ -30,6 +31,7 @@ import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
 import * as Exit from "effect/Exit";
+import * as Scope from "effect/Scope";
 import * as Queue from "effect/Queue";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -728,6 +730,51 @@ describe("OpenCodeAdapterV2", () => {
         answers: { "question-0-drinks": ["Tea", "Water"] },
       });
       assert.deepInclude(delivered, { answers: [["Tea", "Water"]] });
+    }).pipe(
+      Effect.provide(Layer.merge(IdAllocator.layer, McpProviderSessions.layer)),
+      Effect.scoped,
+    ),
+  );
+
+  it.effect("skips shared MCP servers on an external server, which may not reach T3's proxy", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const threadId = ThreadId.make("thread-opencode-shared");
+      const mcpSessions = yield* McpProviderSessions.McpProviderSessions;
+      yield* mcpSessions.set({
+        environmentId: EnvironmentId.make("environment-opencode-shared"),
+        threadId,
+        providerSessionId: "mcp-session-opencode-shared",
+        providerInstanceId: ProviderInstanceId.make("opencode-shared"),
+        endpoint: "http://127.0.0.1:43123/mcp",
+        authorizationHeader: "Bearer thread-credential",
+        browserToolsAvailable: false,
+        sharedServers: [
+          {
+            name: "gateway",
+            url: "http://127.0.0.1:43123/mcp/shared/gateway",
+            headers: { Authorization: "Bearer thread-credential" },
+          },
+        ],
+      });
+      yield* Effect.addFinalizer(() => mcpSessions.clear(threadId));
+      const calls: string[] = [];
+      yield* makeOpenCodeRuntimeHarness("shared", "root", {
+        event: { subscribe: async () => ({ stream: asyncEventStream().stream }) },
+        session: {
+          create: async () => ({ data: { id: "root", time: { created: 1, updated: 1 } } }),
+          abort: async () => ({ data: true }),
+          children: async () => ({ data: [] }),
+        },
+        mcp: {
+          add: async ({ name }: { name: string }) => {
+            calls.push(`add:${name}`);
+            return { data: {} };
+          },
+        },
+      }).pipe(Effect.provideService(Scope.Scope, scope));
+      yield* Scope.close(scope, Exit.void);
+      assert.deepEqual(calls, []);
     }).pipe(
       Effect.provide(Layer.merge(IdAllocator.layer, McpProviderSessions.layer)),
       Effect.scoped,

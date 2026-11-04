@@ -1410,6 +1410,18 @@ function codexThreadRuntimeParams(input: {
       ...(t3Server === undefined
         ? {}
         : {
+            // Shared servers first so T3's own registrations always win a name clash.
+            ...Object.fromEntries(
+              (mcpSession?.sharedServers ?? []).map((server) => [
+                `mcp_servers.${server.name}`,
+                {
+                  url: server.url,
+                  ...(Object.keys(server.headers).length === 0
+                    ? {}
+                    : { http_headers: server.headers }),
+                },
+              ]),
+            ),
             // Override only T3's servers so launch-argument MCP servers survive.
             "mcp_servers.t3-code": { ...t3Server, disabled_tools: [CODEX_DIRECT_ONLY_T3_TOOL] },
             // Code Mode runs a blocking wait as a nested call, and the model keeps working

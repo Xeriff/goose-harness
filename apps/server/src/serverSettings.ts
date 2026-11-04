@@ -21,6 +21,7 @@ import {
   isSecretReference,
   type SecretReference,
   withIdleCompaction,
+  sharedMcpServerKey,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
@@ -137,6 +138,11 @@ const normalizeServerSettings = (
         }),
     ),
   );
+
+/** Secret holding a shared server's OAuth sign-in (see `SharedMcpProxy`); removed with the server. */
+export function sharedMcpOAuthSecretName(serverKey: string): string {
+  return `shared-mcp-oauth-${Buffer.from(serverKey, "utf8").toString("base64url")}`;
+}
 
 export function redactServerSettingsForClient(
   settings: ServerSettings,
@@ -1076,6 +1082,16 @@ const make = Effect.gen(function* () {
           ...(secret.environmentVariable !== undefined
             ? { environmentVariable: secret.environmentVariable }
             : {}),
+        });
+      }
+      // A removed server's OAuth sign-in goes with it.
+      const nextServerKeys = new Set(next.sharedMcpServers.map(sharedMcpServerKey));
+      for (const server of current.sharedMcpServers) {
+        if (nextServerKeys.has(sharedMcpServerKey(server))) continue;
+        changes.push({
+          kind: "remove",
+          secretName: sharedMcpOAuthSecretName(sharedMcpServerKey(server)),
+          operation: "remove-stale-secret",
         });
       }
       return { settings, changes };
