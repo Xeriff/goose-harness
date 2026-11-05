@@ -18,6 +18,9 @@
       "vite": { "entry": [".github/**/*.test.cjs"] },
       "vitest": { "entry": [".github/**/*.test.cjs"] },
     },
+    "goose/plugin-template": {
+      "entry": ["src/server.ts", "src/web.tsx"],
+    },
     "plugins/*": {
       // The host imports the modules named in package.json `goose.server` and `goose.web`.
       "entry": ["src/server.ts", "src/web.tsx"],

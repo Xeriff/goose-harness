@@ -5,6 +5,7 @@ packages:
   - oxlint-plugin-t3code
   - packages/*
   - plugins/*
+  - goose/plugin-template
   - scripts
 
 # Successor to onlyBuiltDependencies/ignoredBuiltDependencies (pnpm 11+).
