@@ -1,0 +1,29 @@
+{
+  "name": "@t3tools/goose-plugin-template",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A starting point for a Goose Harness plugin. Copy it into plugins/<id>.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vp test run --config ../../vite.config.ts --dir ."
+  },
+  "dependencies": {
+    "@t3tools/goose-plugin-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "lucide-react": "^0.564.0",
+    "react": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "goose": {
+    "id": "example",
+    "displayName": "Example",
+    "description": "Counts clicks and gives agents a tool that reads the count.",
+    "apiVersion": 1,
+    "server": "src/server.ts",
+    "web": "src/web.tsx"
+  }
+}

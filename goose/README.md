@@ -4,8 +4,11 @@ Goose Harness is a private fork of [T3 Code](https://github.com/pingdotgg/t3code
 (MIT, © T3 Tools Inc., see [LICENSE](../LICENSE)) that tracks upstream's nightly
 line and adds a plugin system. Upstream's own README is [README.md](../README.md).
 
-Everything we add lives outside upstream code so the daily merge rarely
-conflicts: this `goose/` folder, `.github/README.md`, and `.github/workflows/goose-*`.
+What we add lives in our own files where it can, so the daily merge rarely
+conflicts: this `goose/` folder, `plugins/`, `packages/goose-plugin-api`, the `goose/`
+folders in `apps/server/src` and `apps/web/src`, `.github/README.md`, and
+`.github/workflows/goose-*`. Edits to upstream files are kept to the few lines that
+wire these in.
 
 ## Upstream sync
 
@@ -70,33 +73,14 @@ and closes the PR.
 ## Plugins
 
 The server loads plugins at startup from `plugins/` in this repo, from
-`<T3 home>/goose/plugins`, and from any folders listed in `GOOSE_PLUGIN_DIRS`.
-A plugin is a folder with a `package.json` whose `goose` field is its manifest:
+`<T3 home>/goose/plugins`, and from folders listed in `GOOSE_PLUGIN_DIRS`. Repo plugins can
+also add a page, sidebar items, a settings panel and palette commands to the web and
+desktop clients. Turn plugins on or off in Settings → Plugins; the change applies after a
+server restart.
 
-```json
-{
-  "name": "hello",
-  "version": "0.1.0",
-  "goose": {
-    "id": "hello",
-    "displayName": "Hello",
-    "apiVersion": 1,
-    "server": "./server.ts",
-    "enabledByDefault": true
-  }
-}
-```
+- [`plugins/my-work`](../plugins/my-work): Jira, Bitbucket and GitHub tasks with Start work.
+- [Writing a plugin](plugins.md) covers the manifest, both APIs and the traps. Start from
+  [`goose/plugin-template`](plugin-template).
 
-The server entry's default export has an `activate(ctx)` function. The API is in
-[`packages/goose-plugin-api`](../packages/goose-plugin-api/src/index.ts):
-HTTP routes under `/api/goose/plugins/<id>/`, tools that every agent gets through
-T3 Code's MCP server, read-only agent events, per-plugin settings, storage and secrets.
-
-- A plugin that throws or takes longer than 10 seconds to activate is marked failed;
-  the others keep running. Failing routes, tools and event handlers are logged, not fatal.
-- `GET /api/goose/host/plugins` lists plugins and their state.
-  `PUT /api/goose/host/plugins/<id>/enabled` with `{"enabled": false}` turns one off from
-  the next restart.
-- Plugins run with the server's full permissions. Install only plugins you trust.
-
-The host lives in `apps/server/src/goose/`. Upstream files touched: `server.ts` (3 lines), `mcp/McpHttpServer.ts` (2 lines), `apps/server/package.json` and `knip.jsonc`.
+The host lives in `apps/server/src/goose/` and `apps/web/src/goose/`, and the API in
+[`packages/goose-plugin-api`](../packages/goose-plugin-api).
