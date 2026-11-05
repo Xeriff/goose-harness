@@ -18,6 +18,10 @@
       "vite": { "entry": [".github/**/*.test.cjs"] },
       "vitest": { "entry": [".github/**/*.test.cjs"] },
     },
+    "plugins/*": {
+      // The host imports the modules named in package.json `goose.server` and `goose.web`.
+      "entry": ["src/server.ts", "src/web.tsx"],
+    },
     "scripts": {
       // Knip loads its preprocessor through a CLI option; native verification and
       // worktree setup (from t3.json) run directly. release-desktop.yml bundles the
