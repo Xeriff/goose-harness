@@ -1,0 +1,29 @@
+{
+  "name": "@t3tools/goose-plugin-my-work",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Your Jira issues, Bitbucket pull requests and GitHub work, with a Start work button that opens a thread.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vp test run --config ../../vite.config.ts --dir ."
+  },
+  "dependencies": {
+    "@t3tools/goose-plugin-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "lucide-react": "^0.564.0",
+    "react": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "goose": {
+    "id": "my-work",
+    "displayName": "My work",
+    "description": "Jira issues and Bitbucket pull requests through the Atlassian MCP server, and GitHub through gh.",
+    "apiVersion": 1,
+    "server": "src/server.ts",
+    "web": "src/web.tsx"
+  }
+}

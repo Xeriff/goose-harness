@@ -4,6 +4,7 @@ packages:
   - infra/*
   - oxlint-plugin-t3code
   - packages/*
+  - plugins/*
   - scripts
 
 # Successor to onlyBuiltDependencies/ignoredBuiltDependencies (pnpm 11+).
