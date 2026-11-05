@@ -124,9 +124,40 @@ export interface GooseToolDefinition {
   ) => Promise<GooseToolResult> | GooseToolResult;
 }
 
-/** Tools reach every agent, on every provider, through T3 Code's built-in MCP server. */
+export interface GooseMcpServerInfo {
+  readonly name: string;
+  /** A remote server's address; a local program has `command` instead. */
+  readonly url?: string;
+  readonly command?: string;
+  readonly enabled: boolean;
+}
+
+export interface GooseMcpToolInfo {
+  readonly name: string;
+  readonly description?: string;
+  readonly inputSchema: unknown;
+}
+
+export interface GooseMcpCallResult {
+  readonly isError: boolean;
+  readonly content: ReadonlyArray<{ readonly type: string; readonly text?: string }>;
+  readonly structuredContent?: unknown;
+}
+
+/**
+ * Tools reach every agent, on every provider, through T3 Code's built-in MCP server.
+ * The other methods call the servers in Settings → MCP servers directly, outside a chat,
+ * with the headers and sign-in saved there. Calls to a disabled or unknown server reject.
+ */
 export interface GoosePluginMcp {
   readonly registerTool: (tool: GooseToolDefinition) => void;
+  readonly servers: () => Promise<ReadonlyArray<GooseMcpServerInfo>>;
+  readonly listTools: (server: string) => Promise<ReadonlyArray<GooseMcpToolInfo>>;
+  readonly callTool: (
+    server: string,
+    tool: string,
+    args?: Record<string, unknown>,
+  ) => Promise<GooseMcpCallResult>;
 }
 
 export interface GooseServerPluginContext {

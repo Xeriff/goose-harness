@@ -231,21 +231,28 @@ function mapSecretFieldGroups(
       ) as SimlockDeviceHostConfig,
   );
 
-  // Header values are usually bearer tokens. Each is mapped on its own so header names keep their case.
-  const sharedMcpServers = settings.sharedMcpServers.map((server) => ({
-    ...server,
-    headers: Object.fromEntries(
-      Object.entries(server.headers).map(([headerName, value]) => [
-        headerName,
-        mapFields(
-          { value },
-          ["value"],
-          () =>
-            `shared-mcp-header-${encode(sharedMcpServerKey(server))}-${encode(headerName.toLowerCase())}`,
-        ).value as string,
+  // Header and env values are usually tokens. Each is mapped on its own so names keep their case.
+  const sharedMcpValues = (
+    values: Readonly<Record<string, string>>,
+    secretName: (name: string) => string,
+  ) =>
+    Object.fromEntries(
+      Object.entries(values).map(([name, value]) => [
+        name,
+        mapFields({ value }, ["value"], () => secretName(name)).value as string,
       ]),
-    ),
-  }));
+    );
+  const sharedMcpServers = settings.sharedMcpServers.map((server) => {
+    const key = encode(sharedMcpServerKey(server));
+    return {
+      ...server,
+      headers: sharedMcpValues(
+        server.headers,
+        (name) => `shared-mcp-header-${key}-${encode(name.toLowerCase())}`,
+      ),
+      env: sharedMcpValues(server.env, (name) => `shared-mcp-env-${key}-${encode(name)}`),
+    };
+  });
 
   return {
     ...settings,

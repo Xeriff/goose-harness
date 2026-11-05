@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  ATLASSIAN_MCP_URL,
+  atlassianBasicAuthHeader,
+  atlassianV2Url,
   parseSharedMcpServerDraft,
   sharedMcpServerDraft,
+  splitCommandLine,
   upsertSharedMcpServer,
 } from "./sharedMcpServers.ts";
 
 const gateway = {
   name: "gateway",
   url: "http://127.0.0.1:3050/mcp",
+  args: [],
+  env: {},
   enabled: false,
   headers: { Authorization: "••••••" },
 };
@@ -86,5 +92,60 @@ describe("parseSharedMcpServerDraft", () => {
     });
     if (!("server" in parsed)) return;
     expect(upsertSharedMcpServer([gateway], parsed.server, gateway)).toEqual([parsed.server]);
+  });
+});
+
+describe("Atlassian quick-fill", () => {
+  it("encodes the email and API token as UTF-8 Basic auth", () => {
+    expect(atlassianBasicAuthHeader(" jürgen@example.com ", "tok:en ")).toBe(
+      `Authorization: Basic ${Buffer.from("jürgen@example.com:tok:en").toString("base64")}`,
+    );
+  });
+
+  it("moves only Atlassian's v1 endpoints to v2", () => {
+    expect(atlassianV2Url("https://mcp.atlassian.com/v1/sse")).toBe(ATLASSIAN_MCP_URL);
+    expect(atlassianV2Url("https://mcp.atlassian.com/v1/mcp/authv2")).toBe(ATLASSIAN_MCP_URL);
+    expect(atlassianV2Url(ATLASSIAN_MCP_URL)).toBeNull();
+    expect(atlassianV2Url("https://mcp.atlassian.com/v10/mcp")).toBeNull();
+  });
+});
+
+describe("local programs", () => {
+  it("splits a quoted command line and parses NAME=value variables", () => {
+    expect(
+      parseSharedMcpServerDraft([], {
+        name: "files",
+        url: "",
+        headers: "",
+        command: `npx -y @mcp/files "C:\\My Projects" ''`,
+        env: "API_TOKEN=a=b\n\nDEBUG=",
+      }),
+    ).toMatchObject({
+      server: {
+        command: "npx",
+        args: ["-y", "@mcp/files", "C:\\My Projects", ""],
+        env: { API_TOKEN: "a=b", DEBUG: "" },
+      },
+    });
+    expect(splitCommandLine(`npx "open`)).toBeNull();
+    const draft = { name: "files", url: "", headers: "", command: "npx x" };
+    expect(parseSharedMcpServerDraft([], { ...draft, command: "  " })).toHaveProperty("error");
+    expect(parseSharedMcpServerDraft([], { ...draft, env: "1BAD=x" })).toHaveProperty("error");
+    expect(parseSharedMcpServerDraft([], { ...draft, env: "A=1\nA=2" })).toHaveProperty("error");
+  });
+
+  it("round-trips a saved local server through the edit form", () => {
+    const saved = {
+      id: "files",
+      name: "files",
+      command: "npx",
+      args: ["-y", "@mcp/files", "C:\\My Projects"],
+      env: { API_TOKEN: "••••••" },
+      enabled: false,
+      headers: {},
+    };
+    expect(parseSharedMcpServerDraft([saved], sharedMcpServerDraft(saved), saved)).toEqual({
+      server: saved,
+    });
   });
 });

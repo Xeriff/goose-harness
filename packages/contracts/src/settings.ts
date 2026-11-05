@@ -1197,6 +1197,9 @@ export const SharedMcpServerName = TrimmedNonEmptyString.check(
 );
 const SharedMcpServerUrl = TrimmedNonEmptyString.check(Schema.isPattern(/^https?:\/\/\S+$/));
 const SharedMcpServerHeaderName = TrimmedNonEmptyString.check(Schema.isPattern(/^[A-Za-z0-9-]+$/));
+const SharedMcpServerEnvName = TrimmedNonEmptyString.check(
+  Schema.isPattern(/^[A-Za-z_][A-Za-z0-9_]*$/),
+);
 
 export const SharedMcpServer = Schema.Struct({
   /**
@@ -1206,7 +1209,16 @@ export const SharedMcpServer = Schema.Struct({
    */
   id: Schema.optionalKey(TrimmedNonEmptyString),
   name: SharedMcpServerName,
-  url: SharedMcpServerUrl,
+  /** A remote server's address. A local server has `command` instead. */
+  url: Schema.optionalKey(SharedMcpServerUrl),
+  /** A local program T3 Code starts on the environment's machine and talks to over stdio. */
+  command: Schema.optionalKey(TrimmedNonEmptyString),
+  args: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  cwd: Schema.optionalKey(TrimmedNonEmptyString),
+  /** A local server's environment variables. Values are stored as secrets, like headers. */
+  env: Schema.Record(SharedMcpServerEnvName, Schema.String).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   /**
    * Request headers, typically auth. Values live in the server's secret store
@@ -1216,7 +1228,13 @@ export const SharedMcpServer = Schema.Struct({
   headers: Schema.Record(SharedMcpServerHeaderName, Schema.String).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
-});
+}).check(
+  Schema.makeFilter(
+    (server: { readonly url?: string; readonly command?: string }) =>
+      (server.url === undefined) !== (server.command === undefined) ||
+      "A shared MCP server needs either a URL or a command",
+  ),
+);
 export type SharedMcpServer = typeof SharedMcpServer.Type;
 
 /** The key a server's header secrets are stored under. */

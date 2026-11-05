@@ -1532,6 +1532,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
       const gateway = {
         name: "gateway",
         url: "http://127.0.0.1:3050/mcp",
+        args: [],
+        env: {},
         enabled: true,
         headers: { Authorization: "Bearer gw-secret" },
       };
@@ -1562,6 +1564,36 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
     }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
   );
 
+  it.effect("keeps a local shared MCP server's env values in the secret store", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const local = {
+        name: "everything",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-everything"],
+        enabled: true,
+        headers: {},
+        env: { API_TOKEN: "env-secret", LOG_LEVEL: "debug" },
+      };
+
+      const saved = yield* serverSettings.updateSettings({ sharedMcpServers: [local] });
+      assert.deepEqual(saved.sharedMcpServers, [local]);
+      assert.notInclude(yield* fileSystem.readFileString(serverConfig.settingsPath), "env-secret");
+      const [forClient] = ServerSettingsModule.redactServerSettingsForClient(saved, {
+        secretReferences: true,
+      }).sharedMcpServers;
+      assert.notInclude(forClient?.env.API_TOKEN ?? "", "env-secret");
+
+      // Echoing the redacted values back keeps the stored ones.
+      yield* serverSettings.updateSettings({
+        sharedMcpServers: [{ ...forClient!, enabled: false }],
+      });
+      assert.deepEqual((yield* serverSettings.getSettings).sharedMcpServers[0]?.env, local.env);
+    }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
+  );
+
   it.effect("keeps a shared MCP server's header secret through a rename", () =>
     Effect.gen(function* () {
       const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
@@ -1571,6 +1603,8 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))("server settings"
             id: "mcp_1",
             name: "gateway",
             url: "http://127.0.0.1:3050/mcp",
+            args: [],
+            env: {},
             enabled: true,
             headers: { Authorization: "Bearer gw-secret" },
           },

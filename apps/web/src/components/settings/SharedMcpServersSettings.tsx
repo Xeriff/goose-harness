@@ -1,5 +1,8 @@
 import { type SharedMcpServer, SharedMcpServerTestError } from "@t3tools/contracts";
 import {
+  ATLASSIAN_MCP_URL,
+  atlassianBasicAuthHeader,
+  atlassianV2Url,
   parseSharedMcpServerDraft,
   sharedMcpServerDraft,
   type SharedMcpServerDraft,
@@ -10,6 +13,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  ArrowUpCircleIcon,
   LogInIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -164,6 +168,9 @@ function SharedMcpServerRows({
               onFormChange({ environmentId: environment.environmentId, editing: server })
             }
             onRemove={() => void save(servers.filter((entry) => entry !== server))}
+            onMoveUrl={(url) =>
+              void save(servers.map((entry) => (entry === server ? { ...entry, url } : entry)))
+            }
           />
         ),
       )}
@@ -186,6 +193,7 @@ function SharedMcpServerRow({
   onToggle,
   onEdit,
   onRemove,
+  onMoveUrl,
 }: {
   readonly environment: EnvironmentPresentation;
   readonly server: SharedMcpServer;
@@ -193,7 +201,9 @@ function SharedMcpServerRow({
   readonly onToggle: (enabled: boolean) => void;
   readonly onEdit: () => void;
   readonly onRemove: () => void;
+  readonly onMoveUrl: (url: string) => void;
 }) {
+  const v2Url = server.url === undefined ? null : atlassianV2Url(server.url);
   const testServer = useAtomCommand(serverEnvironment.testSharedMcpServer, {
     reportFailure: false,
   });
@@ -215,6 +225,8 @@ function SharedMcpServerRow({
     | null
   >(null);
   const headerCount = Object.keys(server.headers).length;
+  const envCount = Object.keys(server.env).length;
+  const local = server.command !== undefined;
   const failed = (result: Parameters<typeof squashAtomCommandFailure>[0]) => {
     const failure = squashAtomCommandFailure(result);
     setTest({
@@ -278,6 +290,16 @@ function SharedMcpServerRow({
       title={
         <span className="flex items-center gap-1.5">
           {server.name}
+          {local ? (
+            <Badge size="sm" variant="outline">
+              Local
+            </Badge>
+          ) : null}
+          {envCount > 0 ? (
+            <Badge size="sm" variant="outline">
+              {envCount} {envCount === 1 ? "variable" : "variables"}
+            </Badge>
+          ) : null}
           {headerCount > 0 ? (
             <Badge size="sm" variant="outline">
               {headerCount} {headerCount === 1 ? "header" : "headers"}
@@ -285,7 +307,19 @@ function SharedMcpServerRow({
           ) : null}
         </span>
       }
-      description={<span className="break-all font-mono">{server.url}</span>}
+      description={
+        <>
+          <span className="break-all font-mono">
+            {server.url ?? [server.command, ...server.args].join(" ")}
+          </span>
+          {v2Url ? (
+            <span className="block">
+              Atlassian's older v1 endpoint. Switch to v2 from the menu; an OAuth server signs in
+              again after the switch.
+            </span>
+          ) : null}
+        </>
+      }
       status={
         test === null ? undefined : test.state === "running" ? (
           test.message
@@ -328,14 +362,22 @@ function SharedMcpServerRow({
                 <PlugZapIcon />
                 Test connection
               </MenuItem>
-              <MenuItem disabled={test?.state === "running"} onClick={() => void signIn()}>
-                <LogInIcon />
-                Sign in
-              </MenuItem>
+              {local ? null : (
+                <MenuItem disabled={test?.state === "running"} onClick={() => void signIn()}>
+                  <LogInIcon />
+                  Sign in
+                </MenuItem>
+              )}
               <MenuItem onClick={onEdit}>
                 <PencilIcon />
                 Edit
               </MenuItem>
+              {v2Url ? (
+                <MenuItem onClick={() => onMoveUrl(v2Url)}>
+                  <ArrowUpCircleIcon />
+                  Switch to Atlassian v2
+                </MenuItem>
+              ) : null}
               <MenuSeparator />
               <MenuItem onClick={onRemove}>
                 <Trash2Icon />
@@ -366,9 +408,38 @@ function SharedMcpServerForm({
     editing ? sharedMcpServerDraft(editing) : { name: "", url: "", headers: "" },
   );
   const [error, setError] = useState<string | null>(null);
+  // Set while the Atlassian API-token quick-fill asks for the account's email and token.
+  const [apiToken, setApiToken] = useState<{ email: string; token: string } | null>(null);
+  const local = draft.command !== undefined;
+  const setLocal = (next: boolean) => {
+    setDraft(({ command: _command, env: _env, ...current }) =>
+      next ? { ...current, command: "", env: "" } : current,
+    );
+    setApiToken(null);
+    setError(null);
+  };
+  const fillAtlassian = (withApiToken: boolean) => {
+    setDraft((current) => ({
+      name: current.name || "atlassian",
+      url: ATLASSIAN_MCP_URL,
+      headers: "",
+    }));
+    setApiToken(withApiToken ? { email: "", token: "" } : null);
+    setError(null);
+  };
   const submit = () => {
     if (saving) return;
-    const parsed = parseSharedMcpServerDraft(servers, draft, editing);
+    if (apiToken !== null && (!apiToken.email.trim() || !apiToken.token.trim())) {
+      setError("Enter the Atlassian account email and an API token.");
+      return;
+    }
+    const parsed = parseSharedMcpServerDraft(
+      servers,
+      apiToken === null
+        ? draft
+        : { ...draft, headers: atlassianBasicAuthHeader(apiToken.email, apiToken.token) },
+      editing,
+    );
     if ("error" in parsed) {
       setError(parsed.error);
       return;
@@ -376,7 +447,7 @@ function SharedMcpServerForm({
     onSave(parsed.server);
   };
   const field = (key: keyof SharedMcpServerDraft) => ({
-    value: draft[key],
+    value: draft[key] ?? "",
     onChange: (event: { currentTarget: { value: string } }) => {
       // Read now: React clears `currentTarget` before a deferred updater runs.
       const value = event.currentTarget.value;
@@ -389,7 +460,9 @@ function SharedMcpServerForm({
       title={editing ? `Edit ${editing.name}` : "New MCP server"}
       description={
         error ??
-        "Agents pick it up in their next session. Header values are stored as secrets; a server that uses OAuth signs in from its menu."
+        (local
+          ? "Agents pick it up in their next session. T3 Code runs the command on this environment's machine; variable values are stored as secrets."
+          : "Agents pick it up in their next session. Header values are stored as secrets; a server that uses OAuth signs in from its menu.")
       }
       control={
         <div className="flex items-center gap-2">
@@ -418,21 +491,86 @@ function SharedMcpServerForm({
             aria-label="Server name"
             {...field("name")}
           />
-          <Input
-            className="min-w-64 flex-1"
-            size="sm"
-            placeholder="http://127.0.0.1:3050/mcp"
-            aria-label="Server URL"
-            {...field("url")}
-          />
+          {local ? (
+            <Input
+              className="min-w-64 flex-1"
+              size="sm"
+              placeholder="npx -y @modelcontextprotocol/server-filesystem ~/Documents"
+              aria-label="Server command"
+              {...field("command")}
+            />
+          ) : (
+            <Input
+              className="min-w-64 flex-1"
+              size="sm"
+              placeholder="http://127.0.0.1:3050/mcp"
+              aria-label="Server URL"
+              {...field("url")}
+            />
+          )}
         </div>
-        <Textarea
-          size="sm"
-          rows={2}
-          placeholder="Optional headers, one per line: Authorization: Bearer …"
-          aria-label="Server headers"
-          {...field("headers")}
-        />
+        {local ? (
+          <Textarea
+            size="sm"
+            rows={2}
+            placeholder="Optional environment variables, one per line: API_TOKEN=…"
+            aria-label="Server environment variables"
+            {...field("env")}
+          />
+        ) : apiToken === null ? (
+          <Textarea
+            size="sm"
+            rows={2}
+            placeholder="Optional headers, one per line: Authorization: Bearer …"
+            aria-label="Server headers"
+            {...field("headers")}
+          />
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Input
+              className="w-56"
+              size="sm"
+              type="email"
+              placeholder="you@company.com"
+              aria-label="Atlassian account email"
+              value={apiToken.email}
+              onChange={(event) => {
+                const email = event.currentTarget.value;
+                setApiToken((current) => current && { ...current, email });
+              }}
+            />
+            <Input
+              className="min-w-48 flex-1"
+              size="sm"
+              type="password"
+              placeholder="Atlassian API token"
+              aria-label="Atlassian API token"
+              value={apiToken.token}
+              onChange={(event) => {
+                const token = event.currentTarget.value;
+                setApiToken((current) => current && { ...current, token });
+              }}
+            />
+          </div>
+        )}
+        {editing === undefined ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {local ? null : (
+              <>
+                Atlassian (Jira, Confluence):
+                <Button size="xs" variant="outline" onClick={() => fillAtlassian(true)}>
+                  API token
+                </Button>
+                <Button size="xs" variant="outline" onClick={() => fillAtlassian(false)}>
+                  OAuth
+                </Button>
+              </>
+            )}
+            <Button size="xs" variant="ghost" onClick={() => setLocal(!local)}>
+              {local ? "Use a URL instead" : "Run a local program instead"}
+            </Button>
+          </div>
+        ) : null}
         <button type="submit" hidden />
       </form>
     </SettingsRow>

@@ -65,10 +65,35 @@ login. Put it under **Headers**, one per line, as `Name: value`:
 Header values are stored as secrets. When you edit the server, they show as
 `••••••`. Leave that as it is to keep the saved value, or type a new one.
 
+## Atlassian (Jira, Confluence)
+
+In the new server form, **Atlassian** fills in Atlassian's recommended endpoint,
+`https://mcp.atlassian.com/v2/mcp`:
+
+- **API token** asks for your Atlassian account email and an
+  [API token](https://id.atlassian.com/manage-profile/security/api-tokens), and
+  saves them as the server's login header.
+- **OAuth** leaves the login to **Sign in** from the server's menu.
+
+A server still on an older `https://mcp.atlassian.com/v1/…` address shows a
+note, and its menu has **Switch to Atlassian v2**. An API token keeps working
+after the switch. An OAuth login signs in again.
+
 ## Servers with no login
 
 A public server needs only a name and URL. For example, `deepwiki` at
 `https://mcp.deepwiki.com/mcp`.
+
+## Local programs
+
+Many MCP servers are programs you run, such as `npx -y @modelcontextprotocol/server-filesystem ~/Documents`.
+In the new server form, choose **Run a local program instead** and enter the
+command. Put anything the program needs, such as an API token, under
+environment variables, one per line as `NAME=value`. Their values are stored as
+secrets, like header values.
+
+T3 Code starts the program on the environment's machine, not on the device
+you're using, and keeps one copy running for every agent session.
 
 ## Turning a server off
 
@@ -78,7 +103,5 @@ New sessions pick up any change. For a session that's already running, use
 
 ## Limits
 
-- Servers are reached over `http(s)`. A command-line (stdio) server can be
-  shared through a local MCP gateway, then added here by its URL.
 - An OpenCode server you run yourself doesn't get shared servers, the same as
   T3 Code's own tools.

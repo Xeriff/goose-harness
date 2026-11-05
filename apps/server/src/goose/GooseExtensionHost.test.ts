@@ -16,7 +16,9 @@ import type { OrchestrationV2StoredEvent } from "@t3tools/contracts";
 
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
+import { SharedMcpProxy } from "../mcp/SharedMcpProxy.ts";
 import * as EventSink from "../orchestration-v2/EventSink.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import * as GooseExtensionHost from "./GooseExtensionHost.ts";
 
 const layerConfig = ServerConfig.layerTest(process.cwd(), { prefix: "goose-host-test-" });
@@ -63,8 +65,29 @@ const makeHost = Effect.fn("test.makeHost")(function* (
     stream: () => Stream.fromQueue(eventQueue),
     latestSequence: () => Effect.succeed(0),
   } as unknown as EventSink.EventSinkV2["Service"];
+  const settings = {
+    getSettings: Effect.succeed({
+      sharedMcpServers: [
+        { name: "atlassian", url: "https://mcp.example/mcp", enabled: true, headers: {} },
+        { name: "off", url: "https://off.example/mcp", enabled: false, headers: {} },
+      ],
+    }),
+  } as unknown as ServerSettingsService["Service"];
+  const proxy = {
+    callTool: (server: { name: string }, params: { name: string; arguments: unknown }) =>
+      Effect.succeed({
+        content: [
+          {
+            type: "text",
+            text: `${server.name}.${params.name} ${JSON.stringify(params.arguments)}`,
+          },
+        ],
+      }),
+  } as unknown as SharedMcpProxy["Service"];
   return yield* GooseExtensionHost.make([{ dir: root, source: "user" }]).pipe(
     Effect.provideService(EventSink.EventSinkV2, sink),
+    Effect.provideService(ServerSettingsService, settings),
+    Effect.provideService(SharedMcpProxy, proxy),
   );
 });
 
@@ -92,6 +115,13 @@ it.layer(layerBase)("GooseExtensionHost", (it) => {
         `export default {
           activate(ctx) {
             ctx.http.route("POST", "/echo", (req) => ({ status: 201, body: { got: req.body } }));
+            ctx.http.route("GET", "/mcp", async (req) => {
+              try {
+                return { body: await ctx.mcp.callTool(req.query.get("server"), "search", { q: 1 }) };
+              } catch (error) {
+                return { status: 502, body: error.message };
+              }
+            });
             ctx.mcp.registerTool({
               name: "view",
               description: "Shows the board.",
@@ -118,6 +148,22 @@ it.layer(layerBase)("GooseExtensionHost", (it) => {
       assert.deepStrictEqual(
         yield* host.handleRequest("board", request("GET", "/echo")),
         Option.none(),
+      );
+
+      const mcpCall = (server: string) =>
+        host.handleRequest("board", {
+          ...request("GET", "/mcp"),
+          query: new URLSearchParams({ server }),
+        });
+      assert.deepStrictEqual(
+        yield* mcpCall("atlassian"),
+        Option.some({
+          body: { isError: false, content: [{ type: "text", text: 'atlassian.search {"q":1}' }] },
+        }),
+      );
+      assert.deepStrictEqual(
+        yield* mcpCall("off"),
+        Option.some({ status: 502, body: 'MCP server "off" is turned off.' }),
       );
 
       const [tool] = yield* host.tools;
