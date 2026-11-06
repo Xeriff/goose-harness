@@ -46,6 +46,17 @@ resolve_noise() {
       AUTO_RESOLVED+=("\`$f\`: generated file, took upstream's copy")
     fi
   done < <(git diff --name-only --diff-filter=U)
+
+  # A lockfile both sides changed can merge as text and still be broken, so rebuild it too.
+  local base
+  base="$(git merge-base HEAD MERGE_HEAD)"
+  if [[ "$REGEN_LOCKFILE" == 0 ]] \
+    && ! git diff --quiet "$base" HEAD -- pnpm-lock.yaml \
+    && ! git diff --quiet "$base" MERGE_HEAD -- pnpm-lock.yaml; then
+    git checkout MERGE_HEAD -- pnpm-lock.yaml
+    REGEN_LOCKFILE=1
+    AUTO_RESOLVED+=("\`pnpm-lock.yaml\`: both sides changed it, took upstream's and regenerated it")
+  fi
 }
 
 regenerate_lockfile() {

@@ -1,5 +1,6 @@
 import * as NodeURL from "node:url";
 
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -143,7 +144,8 @@ const pluginRoots = Effect.fn("GooseExtensionHost.pluginRoots")(function* () {
     NodeURL.fileURLToPath(new URL(".", import.meta.url)),
     "../../../../plugins",
   );
-  const extra = (process.env.GOOSE_PLUGIN_DIRS ?? "")
+  const pluginDirs = yield* Config.String("GOOSE_PLUGIN_DIRS").pipe(Config.withDefault(""));
+  const extra = pluginDirs
     .split((yield* HostProcess.Platform) === "win32" ? ";" : ":")
     .filter((dir) => dir.length > 0)
     .map((dir) => ({ dir: path.resolve(dir), source: "user" as const }));
